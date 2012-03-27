@@ -79,12 +79,13 @@ class ChatService(object):
 def main(argv):
     try:
         with pidfile(settings.SERVICE_PID_FILE, create_directory=True):
-
+            
+            #Configure logger
             logging.config.dictConfig(settings.LOGGING)
-            logging.error("Test")
-
+            
+            #Create service
             service = ChatService()
-
+            
             def signal_handler():
                 service.stop()
             
