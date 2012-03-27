@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [ $# -ne 1 ]
+then
+    echo "Usage: `basename $0` [localdev|integration|staging|prod]"
+    exit 1
+fi
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+/usr/bin/env python $DIR/../manager.py --env $1 start --user thirty --group thirty

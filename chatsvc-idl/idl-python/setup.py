@@ -2,12 +2,10 @@
 
 from distutils.core import setup
 
-setup(name='techresidents services chatsvc',
+setup(name='trchatsvc',
       version='${project.version}',
       description='30and30 Service',
-      packages=['techresidents',
-                'techresidents.services',
-                'techresidents.services.chatsvc',
-                'techresidents.services.chatsvc.gen']
+      packages=['trchatsvc',
+                'trchatsvc.gen']
     )
 

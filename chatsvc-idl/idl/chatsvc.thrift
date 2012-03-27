@@ -1,5 +1,5 @@
 namespace java com.techresidents.services.chatsvc.gen
-namespace py techresidents.services.chatsvc.gen
+namespace py trchatsvc.gen
 
 include "core.thrift"
 
