@@ -5,7 +5,7 @@ from default_settings import *
 ENV="localdev"
 
 #Service settings
-SERVICE_PID_FILE = "%s.%s.pid" % (SERVICE, ENV)
+SERVICE_PID_FILE = "/opt/30and30/data/%s/pid/%s.%s.pid" % (SERVICE, SERVICE, ENV)
 
 #Logging settings
 LOGGING = {
@@ -34,7 +34,7 @@ LOGGING = {
             "level": "DEBUG",
             "class": "logging.handlers.TimedRotatingFileHandler",
             "formatter": "long_formatter",
-            "filename": "%s.%s.log" % (SERVICE, ENV),
+            "filename": "/opt/30and30/data/%s/logs/%s.%s.log" % (SERVICE, SERVICE, ENV),
             "when": "midnight",
             "interval": 1,
             "backupCount": 7

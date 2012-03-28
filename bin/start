@@ -7,5 +7,14 @@ then
 fi
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PYTHON="/usr/bin/env python"
 
-/usr/bin/env python $DIR/../manager.py --env $1 start --user thirty --group thirty
+if [ -d $DIR/../env ]
+then
+    PYTHON="$DIR/../env/bin/python"
+fi
+
+echo $PYTHON
+
+. /opt/30and30/etc/profile
+$PYTHON $DIR/../manager.py --env $1 start --user thirty --group thirty

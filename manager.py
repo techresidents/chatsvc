@@ -33,7 +33,13 @@ def start(env=None, user=None, group=None):
     if env:
         os.putenv("SERVICE_ENV", env)
     
-    command = ["/usr/bin/env", "python", SERVICE_PATH]
+    #If env directory exists, use that python.
+    #Otherwise backoff to /usr/bin/env python.
+    if os.path.exists(os.path.join(PROJECT_DIRECTORY, "env")):
+        python = os.path.join(PROJECT_DIRECTORY, "env", "bin", "python")
+        command = [python, SERVICE_PATH]
+    else:
+        command = ["/usr/bin/env", "python", SERVICE_PATH]
 
     pid = exec_daemon(
             command[0],
