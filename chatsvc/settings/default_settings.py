@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+import os
 
-ENV = "default"
+ENV = os.getenv("SERVICE_ENV", "default")
 
 #Service Settings
 SERVICE = "chatsvc"
@@ -10,10 +10,21 @@ SERVICE_PID_FILE = "%s.%s.pid" % (SERVICE, ENV)
 SERVER_HOST = "localhost"
 SERVER_PORT = "9090"
 
+#Zookeeper settings
+ZOOKEEPER_HOSTS = ["localdev:2181"]
+
 #Mongrel settings
-MONGREL_SENDER_ID = "sender_id"
+MONGREL_SENDER_ID = "sender_id_default"
 MONGREL_PUB_ADDR = "tcp://localdev:9996"
 MONGREL_PULL_ADDR = "tcp://localdev:9997"
+
+#Riak settings
+RIAK_HOST = "localdev"
+RIAK_PORT = 8087
+RIAK_SESSION_BUCKET = "tr_sessions"
+
+#Chat settings
+CHAT_LONG_POLL_WAIT = 10
 
 #Logging settings
 LOGGING = {

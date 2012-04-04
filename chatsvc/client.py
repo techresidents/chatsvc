@@ -18,6 +18,8 @@ def main(argv):
   
  print client.getVersion(context)
  print client.getBuildNumber(context)
+ print client.getMessages(context, 0, False, 0)
+ #client.shutdown(context)
  
 if __name__ == '__main__':
  sys.exit(main(sys.argv))

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from gevent.event import Event
 
 class ChatSession(object):
@@ -8,17 +6,17 @@ class ChatSession(object):
         self.event = Event()
         self.messages = []
 
-    def getMessages(self, asOf=None):
-        if asOf:
-            return [m for m in self.messages if m.timestamp > asOf]
+    def get_messages(self, asOf=None, block=False, timeout=None):
+        if asOf is not None:
+            messages = [m for m in self.messages if m.header.timestamp > asOf]
+            if not messages and block:
+                self.event.wait(timeout)
+                messages = [m for m in self.messages if m.header.timestamp > asOf]
+            return messages
         else:
             return self.messages
     
-    def waitMessage(self, timeout=None):
-        self.event.wait(timeout)
-    
-    def sendMessage(self, message):
+    def send_message(self, message):
         self.messages.append(message)
         self.event.set()
         self.event.clear()
-

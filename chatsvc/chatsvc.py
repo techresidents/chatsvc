@@ -2,79 +2,33 @@
 
 import logging
 import logging.config
-import os
 import signal
 import sys
 import gevent
 
-from thrift import Thrift
-from thrift.transport import TTransport
-from thrift.protocol import TBinaryProtocol
-
-
-from trpycore.mongrel2_gevent.handler import Connection
-
-from trpycore.thrift_gevent.server import TGeventServer
-from trpycore.thrift_gevent.transport import TSocket
-from trchatsvc.gen import TChatService
+import settings
 
 from trpycore.process.pid import pidfile, PidFileException
+from trsvcscore.service_gevent.base import Mongrel2Service
+from trchatsvc.gen import TChatService
 
-import settings
 from handler import ChatServiceHandler
 
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
-
-class ChatService(object):
+class ChatService(Mongrel2Service):
     def __init__(self):
-        self.running = False
-        self.handler = ChatServiceHandler()
-        self.greenlet = None
-        self.mongrel2_greenlet = None
-    
-    def start(self):
-        if not self.running:
-            self.running = True
-            self.greenlet = gevent.spawn(self.run)
-            self.mongrel2_greenlet = gevent.spawn(self.run_mongrel2)
-    
-    def run(self):
-        processor = TChatService.Processor(self.handler)
-        transport = TSocket.TServerSocket(settings.SERVER_HOST, settings.SERVER_PORT)
-        tfactory = TTransport.TBufferedTransportFactory()
-        pfactory = TBinaryProtocol.TBinaryProtocolFactory()
 
-        server = TGeventServer(processor, transport, tfactory, pfactory)
-        server.serve()
-    
-    def run_mongrel2(self):
-        connection = Connection(
-                settings.MONGREL_SENDER_ID,
-                settings.MONGREL_PULL_ADDR,
-                settings.MONGREL_PUB_ADDR)
+        handler = ChatServiceHandler()
 
-        while True:
-            request = connection.recv()
-            gevent.spawn(self.handler.handle, connection, request)
-
-    
-    def stop(self):
-        if self.running:
-            self.running = False
-
-            self.greenlet.kill()
-            self.greenlet = None
-
-            self.mongrel2_greenlet.kill()
-            self.mongrel2_greenlet = None
-    
-    def join(self):
-        if self.greenlet is not None:
-            self.greenlet.join()
-
-        if self.mongrel2_greenlet is not None:
-            self.mongrel2_greenlet.join()
+        super(ChatService, self).__init__(
+                name=settings.SERVICE,
+                host=settings.SERVER_HOST,
+                port=settings.SERVER_PORT,
+                handler=handler,
+                processor=TChatService.Processor(handler),
+                mongrel2_sender_id=settings.MONGREL_SENDER_ID,
+                mongrel2_pull_addr=settings.MONGREL_PULL_ADDR,
+                mongrel2_pub_addr=settings.MONGREL_PUB_ADDR)
  
 def main(argv):
     try:

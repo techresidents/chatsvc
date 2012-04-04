@@ -1,4 +1,2 @@
-#!/usr/bin/env python
-
-VERSION = "0.1-SNAPSHOT"
+VERSION = "0.1"
 BUILD = None
