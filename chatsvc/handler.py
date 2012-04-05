@@ -9,8 +9,9 @@ sys.path.insert(0, PROJECT_ROOT)
 import riak
 from trpycore import riak_gevent
 from trsvcscore.decorators.mongrel2 import session_required
-from trsvcscore.service_gevent.handler import Mongrel2Handler
+from trsvcscore.service_gevent.handler import GMongrel2Handler
 from trsvcscore.session.riak import RiakSessionStore
+from trsvcscore.hashring.zookeeper import ZookeeperServiceHashring
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
 
@@ -20,11 +21,11 @@ from session import ChatSession
 from message import MessageFactory, MessageEncoder
 
 
-class ChatServiceHandler(TChatService.Iface, Mongrel2Handler):
+class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
     def __init__(self):
         super(ChatServiceHandler, self).__init__(
                 name=settings.SERVICE,
-                host=settings.SERVER_HOST,
+                interface=settings.SERVER_INTERFACE,
                 port=settings.SERVER_PORT,
                 version=version.VERSION,
                 build=version.BUILD,
@@ -38,8 +39,24 @@ class ChatServiceHandler(TChatService.Iface, Mongrel2Handler):
                 transport_class=riak_gevent.RiakPbcTransport)
 
         self.session_store = RiakSessionStore(self.riak_client, settings.RIAK_SESSION_BUCKET)
+        
+        self.hashring = ZookeeperServiceHashring(
+                zookeeper_client=self.zookeeper_client,
+                service_name=settings.SERVICE,
+                service_port=settings.SERVER_PORT,
+                num_positions=3,
+                data=None)
 
         self.chat_sessions = {}
+    
+
+    def start(self):
+        super(ChatServiceHandler, self).start()
+        self.hashring.start()
+    
+    def stop(self):
+        self.hashring.stop()
+        super(ChatServiceHandler, self).stop()
     
     def _handle_message(self, request, session):
         session_data = session.get_data()

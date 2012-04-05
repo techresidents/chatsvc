@@ -9,20 +9,20 @@ import gevent
 import settings
 
 from trpycore.process.pid import pidfile, PidFileException
-from trsvcscore.service_gevent.base import Mongrel2Service
+from trsvcscore.service_gevent.base import GMongrel2Service
 from trchatsvc.gen import TChatService
 
 from handler import ChatServiceHandler
 
 
-class ChatService(Mongrel2Service):
+class ChatService(GMongrel2Service):
     def __init__(self):
 
         handler = ChatServiceHandler()
 
         super(ChatService, self).__init__(
                 name=settings.SERVICE,
-                host=settings.SERVER_HOST,
+                interface=settings.SERVER_INTERFACE,
                 port=settings.SERVER_PORT,
                 handler=handler,
                 processor=TChatService.Processor(handler),
@@ -33,17 +33,17 @@ class ChatService(Mongrel2Service):
 def main(argv):
     try:
         with pidfile(settings.SERVICE_PID_FILE, create_directory=True):
-            
+
             #Configure logger
             logging.config.dictConfig(settings.LOGGING)
             
             #Create service
             service = ChatService()
             
-            def signal_handler():
+            def sigterm_handler():
                 service.stop()
-            
-            gevent.signal(signal.SIGTERM, signal_handler);
+
+            gevent.signal(signal.SIGTERM, sigterm_handler);
 
             service.start()
             service.join()

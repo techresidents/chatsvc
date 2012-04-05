@@ -1,4 +1,5 @@
 import os
+import socket
 
 ENV = os.getenv("SERVICE_ENV", "default")
 
@@ -7,7 +8,8 @@ SERVICE = "chatsvc"
 SERVICE_PID_FILE = "%s.%s.pid" % (SERVICE, ENV)
 
 #Server settings
-SERVER_HOST = "localhost"
+SERVER_HOST = socket.gethostname()
+SERVER_INTERFACE = "0.0.0.0"
 SERVER_PORT = "9090"
 
 #Zookeeper settings
