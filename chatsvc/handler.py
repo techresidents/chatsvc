@@ -72,6 +72,9 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
             self.chat_sessions[chat_session_token] = ChatSession(chat_session_token)
         return self.chat_sessions[chat_session_token]
     
+    def handle_disconnect(self, request):
+        pass
+
     @session_required
     def handle_get_chat_messages(self, request, session):
         request_context, chat_session_token = self._handle_message(request, session)
