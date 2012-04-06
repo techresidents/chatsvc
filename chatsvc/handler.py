@@ -20,10 +20,16 @@ import settings
 from session import ChatSession
 from message import MessageFactory, MessageEncoder
 
+URL_HANDLERS = [
+    (r'^/chat/messages$', 'handle_get_chat_messages'),
+    (r'^/chat/message/tag$', 'handle_post_chat_message_tag'),
+    (r'^/chat/message/whiteboard$', 'handle_post_chat_message_whiteboard'),
+]
 
 class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
     def __init__(self):
         super(ChatServiceHandler, self).__init__(
+                url_handlers=URL_HANDLERS,
                 name=settings.SERVICE,
                 interface=settings.SERVER_INTERFACE,
                 port=settings.SERVER_PORT,
