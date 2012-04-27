@@ -6,11 +6,13 @@ import sys
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 sys.path.insert(0, PROJECT_ROOT)
 
-import riak
+import gevent.queue
+
 from trpycore import riak_gevent
-from trsvcscore.decorators.mongrel2 import session_required
+from trpycore.riak_common.factory import RiakClientFactory
+from trsvcscore.mongrel2.decorator import session_required
 from trsvcscore.service_gevent.handler import GMongrel2Handler
-from trsvcscore.session.riak import RiakSessionStore
+from trsvcscore.session.riak import RiakSessionStorePool
 from trsvcscore.hashring.zookeeper import ZookeeperServiceHashring
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
@@ -22,8 +24,11 @@ from message import MessageFactory, MessageEncoder
 
 URL_HANDLERS = [
     (r'^/chat/messages$', 'handle_get_chat_messages'),
-    (r'^/chat/message/tag$', 'handle_post_chat_message_tag'),
-    (r'^/chat/message/whiteboard$', 'handle_post_chat_message_whiteboard'),
+    (r'^/chat/message/minute$', 'handle_minute_create'),
+    (r'^/chat/message/minute/(?P<minute_id>\w+)$', 'handle_minute_update'),
+    (r'^/chat/message/tag$', 'handle_tag_create'),
+    (r'^/chat/message/tag/(?P<tag_id>\w+)$', 'handle_tag_delete'),
+    (r'^/chat/message/whiteboard$', 'handle_whiteboard_create'),
 ]
 
 class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
@@ -39,12 +44,16 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
 
         self.message_factory = MessageFactory()
 
-        self.riak_client = riak.RiakClient(
+        self.riak_client_factory = RiakClientFactory(
                 host=settings.RIAK_HOST,
                 port=settings.RIAK_PORT,
                 transport_class=riak_gevent.RiakPbcTransport)
 
-        self.session_store = RiakSessionStore(self.riak_client, settings.RIAK_SESSION_BUCKET)
+        self.session_store_pool = RiakSessionStorePool(
+                self.riak_client_factory,
+                settings.RIAK_SESSION_BUCKET,
+                settings.RIAK_SESSION_POOL_SIZE,
+                queue_class=gevent.queue.Queue)
         
         self.hashring = ZookeeperServiceHashring(
                 zookeeper_client=self.zookeeper_client,
@@ -94,18 +103,51 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
         return json.dumps(messages, cls=MessageEncoder)
 
     @session_required
-    def handle_post_chat_message_tag(self, request, session):
+    def handle_minute_create(self, request, session):
         request_context, chat_session_token = self._handle_message(request, session)
-        name = request.param("name")
-        message = self.message_factory.create_tag_message(chat_session_token, request_context.userId, name)
+        topic_id = request.param("topicId")
+        message = self.message_factory.minute_create_message(
+                chat_session_token,
+                request_context.userId,
+                topic_id)
         message = self.sendMessage(request_context, message)
         return json.dumps(message, cls=MessageEncoder)
 
     @session_required
-    def handle_post_chat_message_whiteboard(self, request, session):
+    def handle_minute_update(self, request, session, minute_id):
         request_context, chat_session_token = self._handle_message(request, session)
-        data = request.param("data")
-        message = self.message_factory.create_whiteboard_message(chat_session_token, request_context.userId, data)
+        topic_id = request.param("topicId")
+        start_timestamp = request.param("startTimestamp")
+        message = self.message_factory.minute_update_message(
+                chat_session_token,
+                request_context.userId,
+                minute_id,
+                topic_id,
+                start_timestamp)
+        message = self.sendMessage(request_context, message)
+        return json.dumps(message, cls=MessageEncoder)
+
+    @session_required
+    def handle_tag_create(self, request, session):
+        request_context, chat_session_token = self._handle_message(request, session)
+        name = request.param("name")
+        message = self.message_factory.tag_create_message(chat_session_token, request_context.userId, name)
+        message = self.sendMessage(request_context, message)
+        return json.dumps(message, cls=MessageEncoder)
+
+
+    @session_required
+    def handle_tag_delete(self, request, session, tag_id):
+        request_context, chat_session_token = self._handle_message(request, session)
+        message = self.message_factory.tag_delete_message(chat_session_token, request_context.userId, tag_id)
+        message = self.sendMessage(request_context, message)
+        return json.dumps(message, cls=MessageEncoder)
+
+    @session_required
+    def handle_whiteboard_create(self, request, session):
+        request_context, chat_session_token = self._handle_message(request, session)
+        name = request.param("name")
+        message = self.message_factory.whiteboard_create_message(chat_session_token, request_context.userId, name)
         message = self.sendMessage(request_context, message)
         return json.dumps(message, cls=MessageEncoder)
 

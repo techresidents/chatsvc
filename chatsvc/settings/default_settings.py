@@ -10,7 +10,7 @@ SERVICE_PID_FILE = "%s.%s.pid" % (SERVICE, ENV)
 #Server settings
 SERVER_HOST = socket.gethostname()
 SERVER_INTERFACE = "0.0.0.0"
-SERVER_PORT = "9090"
+SERVER_PORT = 9090
 
 #Zookeeper settings
 ZOOKEEPER_HOSTS = ["localdev:2181"]
@@ -24,6 +24,7 @@ MONGREL_PULL_ADDR = "tcp://localdev:9997"
 RIAK_HOST = "localdev"
 RIAK_PORT = 8087
 RIAK_SESSION_BUCKET = "tr_sessions"
+RIAK_SESSION_POOL_SIZE = 4
 
 #Chat settings
 CHAT_LONG_POLL_WAIT = 10
