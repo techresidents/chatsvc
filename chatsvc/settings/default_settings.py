@@ -1,3 +1,4 @@
+import hashlib
 import os
 import socket
 
@@ -16,7 +17,7 @@ SERVER_PORT = 9090
 ZOOKEEPER_HOSTS = ["localdev:2181"]
 
 #Mongrel settings
-MONGREL_SENDER_ID = "sender_id_default"
+MONGREL_SENDER_ID = "chatsvc_" + hashlib.sha1(SERVER_HOST+str(SERVER_PORT)).hexdigest()
 MONGREL_PUB_ADDR = "tcp://localdev:9996"
 MONGREL_PULL_ADDR = "tcp://localdev:9997"
 
