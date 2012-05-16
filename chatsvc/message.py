@@ -1,8 +1,8 @@
 import json
-import time
 import uuid
 
 import trchatsvc.gen.ttypes as ttypes
+from trpycore.timezone import tz
 
 class MessageFactory(object):
     def __init__(self):
@@ -10,7 +10,7 @@ class MessageFactory(object):
 
     def create_header(self, chat_session_token, user_id, type, id=None, timestamp=None):
         id = id or uuid.uuid4().hex
-        timestamp = timestamp or time.time()
+        timestamp = timestamp or tz.timestamp()
 
         return ttypes.MessageHeader(
                 id=id,
@@ -19,9 +19,13 @@ class MessageFactory(object):
                 userId=user_id,
                 timestamp=timestamp)
 
-    def tag_create_message(self, chat_session_token, user_id, name):
+    def tag_create_message(self, chat_session_token, user_id, minute_id, name, tag_reference_id=None):
         header = self.create_header(chat_session_token, user_id, ttypes.MessageType.TAG_CREATE)
-        message = ttypes.TagCreateMessage(tagId=uuid.uuid4().hex, name=name)
+        message = ttypes.TagCreateMessage(
+                tagId=uuid.uuid4().hex,
+                minuteId=minute_id,
+                name=name,
+                tagReferenceId=tag_reference_id)
         return ttypes.Message(header=header, tagCreateMessage=message)
 
     def tag_delete_message(self, chat_session_token, user_id, tag_id):
@@ -54,7 +58,7 @@ class MessageFactory(object):
         message = ttypes.MinuteCreateMessage(
                 minuteId=uuid.uuid4().hex,
                 topicId=topic_id,
-                startTimestamp=time.time())
+                startTimestamp=tz.timestamp())
         return ttypes.Message(header=header, minuteCreateMessage=message)
 
     def minute_update_message(self, chat_session_token, user_id, minute_id, topic_id, start_timestamp):
@@ -63,7 +67,7 @@ class MessageFactory(object):
                 minuteId=minute_id,
                 topicId=topic_id,
                 startTimestamp=start_timestamp,
-                endTimestamp=time.time())
+                endTimestamp=tz.timestamp())
         return ttypes.Message(header=header, minuteUpdateMessage=message)
 
 class MessageEncoder(json.JSONEncoder):
@@ -106,7 +110,9 @@ class MessageEncoder(json.JSONEncoder):
         message = message.tagCreateMessage
         return {
             "tagId": message.tagId,
+            "minuteId": message.minuteId,
             "name": message.name,
+            "tagReferenceId": message.tagReferenceId,
         }
 
     def encode_tag_delete_message(self, message):
@@ -149,6 +155,7 @@ class MessageEncoder(json.JSONEncoder):
             "minuteId": message.minuteId,
             "topicId": message.topicId,
             "startTimestamp": message.startTimestamp,
+            "endTimestamp": message.endTimestamp,
         }
 
     def encode_minute_update(self, message):

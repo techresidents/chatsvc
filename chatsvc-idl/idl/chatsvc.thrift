@@ -38,7 +38,9 @@ struct MinuteUpdateMessage {
 
 struct TagCreateMessage {
     1: optional string tagId, 
-    2: string name,   
+    2: optional i32 tagReferenceId,   
+    3: string minuteId,   
+    4: string name, 
 }
 
 struct TagDeleteMessage {

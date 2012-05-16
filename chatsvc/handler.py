@@ -29,6 +29,9 @@ URL_HANDLERS = [
     (r'^/chat/message/tag$', 'handle_tag_create'),
     (r'^/chat/message/tag/(?P<tag_id>\w+)$', 'handle_tag_delete'),
     (r'^/chat/message/whiteboard$', 'handle_whiteboard_create'),
+    (r'^/chat/message/whiteboard/(?P<whiteboard_id>\w+)$', 'handle_whiteboard_delete'),
+    (r'^/chat/message/whiteboard/(?P<whiteboard_id>\w+)/path$', 'handle_whiteboard_create_path'),
+    (r'^/chat/message/whiteboard/(?P<whiteboard_id>\w+)/path/(?P<path_id>\w+)$', 'handle_whiteboard_delete_path'),
 ]
 
 class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
@@ -130,11 +133,20 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
     @session_required
     def handle_tag_create(self, request, session):
         request_context, chat_session_token = self._handle_message(request, session)
+
+        #request parameters
         name = request.param("name")
-        message = self.message_factory.tag_create_message(chat_session_token, request_context.userId, name)
+        minute_id = request.param("minuteId")
+        tag_reference_id = request.param("tagReferenceId")
+
+        message = self.message_factory.tag_create_message(
+                chat_session_token,
+                request_context.userId,
+                minute_id,
+                name,
+                tag_reference_id)
         message = self.sendMessage(request_context, message)
         return json.dumps(message, cls=MessageEncoder)
-
 
     @session_required
     def handle_tag_delete(self, request, session, tag_id):
@@ -148,6 +160,28 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
         request_context, chat_session_token = self._handle_message(request, session)
         name = request.param("name")
         message = self.message_factory.whiteboard_create_message(chat_session_token, request_context.userId, name)
+        message = self.sendMessage(request_context, message)
+        return json.dumps(message, cls=MessageEncoder)
+
+    @session_required
+    def handle_whiteboard_delete(self, request, session, whiteboard_id):
+        request_context, chat_session_token = self._handle_message(request, session)
+        message = self.message_factory.whiteboard_delete_message(chat_session_token, request_context.userId, whiteboard_id)
+        message = self.sendMessage(request_context, message)
+        return json.dumps(message, cls=MessageEncoder)
+
+    @session_required
+    def handle_whiteboard_create_path(self, request, session, whiteboard_id):
+        request_context, chat_session_token = self._handle_message(request, session)
+        path_data = request.param("pathData")
+        message = self.message_factory.whiteboard_create_path_message(chat_session_token, request_context.userId, whiteboard_id, path_data)
+        message = self.sendMessage(request_context, message)
+        return json.dumps(message, cls=MessageEncoder)
+
+    @session_required
+    def handle_whiteboard_delete_path(self, request, session, whiteboard_id):
+        request_context, chat_session_token = self._handle_message(request, session)
+        message = self.message_factory.whiteboard_delete_path_message(chat_session_token, request_context.userId, whiteboard_id)
         message = self.sendMessage(request_context, message)
         return json.dumps(message, cls=MessageEncoder)
 
