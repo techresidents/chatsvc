@@ -35,7 +35,9 @@ class MessageFactory(object):
 
     def whiteboard_create_message(self, chat_session_token, user_id, name):
         header = self.create_header(chat_session_token, user_id, ttypes.MessageType.WHITEBOARD_CREATE)
-        message = ttypes.WhiteboardCreateMessage(name=name)
+        message = ttypes.WhiteboardCreateMessage(
+                whiteboardId=uuid.uuid4().hex,
+                name=name)
         return ttypes.Message(header=header, whiteboardCreateMessage=message)
 
     def whiteboard_delete_message(self, chat_session_token, user_id, whiteboard_id):
@@ -45,7 +47,9 @@ class MessageFactory(object):
 
     def whiteboard_create_path_message(self, chat_session_token, user_id, whiteboard_id, path_data):
         header = self.create_header(chat_session_token, user_id, ttypes.MessageType.WHITEBOARD_CREATE_PATH)
-        message = ttypes.WhiteboardCreatePathMessage(pathData=path_data)
+        message = ttypes.WhiteboardCreatePathMessage(
+                pathId=uuid.uuid4().hex,
+                pathData=path_data)
         return ttypes.Message(header=header, whiteboardCreatePathMessage=message)
 
     def whiteboard_delete_path_message(self, chat_session_token, user_id, whiteboard_id, path_id):
