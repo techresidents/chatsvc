@@ -48,6 +48,7 @@ class MessageFactory(object):
     def whiteboard_create_path_message(self, chat_session_token, user_id, whiteboard_id, path_data):
         header = self.create_header(chat_session_token, user_id, ttypes.MessageType.WHITEBOARD_CREATE_PATH)
         message = ttypes.WhiteboardCreatePathMessage(
+                whiteboardId=whiteboard_id,
                 pathId=uuid.uuid4().hex,
                 pathData=path_data)
         return ttypes.Message(header=header, whiteboardCreatePathMessage=message)
@@ -143,7 +144,7 @@ class MessageEncoder(json.JSONEncoder):
         return {
             "whiteboardId": message.whiteboardId,
             "pathId": message.pathId,
-            "pathdata": message.pathData,
+            "pathData": message.pathData,
         }
 
     def encode_whiteboard_delete_path_message(self, message):
