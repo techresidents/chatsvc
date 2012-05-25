@@ -179,9 +179,9 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
         return json.dumps(message, cls=MessageEncoder)
 
     @session_required
-    def handle_whiteboard_delete_path(self, request, session, whiteboard_id):
+    def handle_whiteboard_delete_path(self, request, session, whiteboard_id, path_id):
         request_context, chat_session_token = self._handle_message(request, session)
-        message = self.message_factory.whiteboard_delete_path_message(chat_session_token, request_context.userId, whiteboard_id)
+        message = self.message_factory.whiteboard_delete_path_message(chat_session_token, request_context.userId, whiteboard_id, path_id)
         message = self.sendMessage(request_context, message)
         return json.dumps(message, cls=MessageEncoder)
 
