@@ -4,6 +4,8 @@ import uuid
 import trchatsvc.gen.ttypes as ttypes
 from trpycore.timezone import tz
 
+from marker import MarkerFactory, MarkerEncoder
+
 class MessageFactory(object):
     def __init__(self):
         pass
@@ -18,6 +20,14 @@ class MessageFactory(object):
                 chatSessionToken = chat_session_token,
                 userId=user_id,
                 timestamp=timestamp)
+    
+    def marker_create_message(self, chat_session_token, user_id, marker):
+        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.MARKER_CREATE)
+        message = ttypes.MarkerCreateMessage(
+                markerId=uuid.uuid4().hex,
+                marker=MarkerFactory.create(marker))
+        return ttypes.Message(header=header, markerCreateMessage=message)
+
 
     def tag_create_message(self, chat_session_token, user_id, minute_id, name, tag_reference_id=None):
         header = self.create_header(chat_session_token, user_id, ttypes.MessageType.TAG_CREATE)
@@ -75,11 +85,14 @@ class MessageFactory(object):
                 endTimestamp=tz.timestamp())
         return ttypes.Message(header=header, minuteUpdateMessage=message)
 
+
 class MessageEncoder(json.JSONEncoder):
     def __init__(self, *args, **kwargs):
         super(MessageEncoder, self).__init__(*args, **kwargs)
+        self.marker_encoder = MarkerEncoder()
 
         self.message_type_encoder = {
+            ttypes.MessageType.MARKER_CREATE: self.encode_marker_create_message,
             ttypes.MessageType.TAG_CREATE: self.encode_tag_create_message,
             ttypes.MessageType.TAG_DELETE: self.encode_tag_delete_message,
             ttypes.MessageType.WHITEBOARD_CREATE: self.encode_whiteboard_create_message,
@@ -93,6 +106,8 @@ class MessageEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, ttypes.Message):
             return self.encode_message(obj)
+        elif isinstance(obj, ttypes.Marker):
+            return self.marker_encoder.default(obj)
         else:
             return super(MessageEncoder, self).default(obj)
     
@@ -109,6 +124,13 @@ class MessageEncoder(json.JSONEncoder):
             "chatSessionToken": obj.chatSessionToken,
             "userId": obj.userId,
             "timestamp": obj.timestamp,
+        }
+
+    def encode_marker_create_message(self, message):
+        message = message.markerCreateMessage
+        return {
+            "markerId": message.markerId,
+            "marker": message.marker,
         }
 
     def encode_tag_create_message(self, message):
