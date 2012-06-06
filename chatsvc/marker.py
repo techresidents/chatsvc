@@ -2,6 +2,25 @@ import json
 
 import trchatsvc.gen.ttypes as ttypes
 
+
+def create_connected_marker(marker):
+    return ttypes.Marker(
+            type=ttypes.MarkerType.CONNECTED_MARKER,
+            connectedMarker=ttypes.ConnectedMarker(
+                userId=marker.get("userId"),
+                isConnected=marker.get("isConnected")
+                )
+            )
+
+def create_publishing_marker(marker):
+    return ttypes.Marker(
+            type=ttypes.MarkerType.PUBLISHING_MARKER,
+            publishingMarker=ttypes.PublishingMarker(
+                userId=marker.get("userId"),
+                isPublishing=marker.get("isPublishing")
+                )
+            )
+
 def create_speaking_marker(marker):
     return ttypes.Marker(
             type=ttypes.MarkerType.SPEAKING_MARKER,
@@ -11,8 +30,11 @@ def create_speaking_marker(marker):
                 )
             )
 
+
 MARKER_TYPE_MAP = {
-    ttypes.MarkerType.SPEAKING_MARKER: create_speaking_marker
+    ttypes.MarkerType.CONNECTED_MARKER: create_connected_marker,
+    ttypes.MarkerType.PUBLISHING_MARKER: create_publishing_marker,
+    ttypes.MarkerType.SPEAKING_MARKER: create_speaking_marker,
 }
 
 class MarkerFactory(object):
@@ -27,6 +49,8 @@ class MarkerEncoder(json.JSONEncoder):
         super(MarkerEncoder, self).__init__(*args, **kwargs)
 
         self.marker_type_encoder = {
+            ttypes.MarkerType.CONNECTED_MARKER: self.encode_connected_marker,
+            ttypes.MarkerType.PUBLISHING_MARKER: self.encode_publishing_marker,
             ttypes.MarkerType.SPEAKING_MARKER: self.encode_speaking_marker,
         }
 
@@ -38,6 +62,24 @@ class MarkerEncoder(json.JSONEncoder):
     
     def encode_marker(self, marker):
         return self.marker_type_encoder[marker.type](marker);
+
+    def encode_connected_marker(self, marker):
+        type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
+        marker = marker.connectedMarker
+        return {
+            "type": type,
+            "userId": marker.userId,
+            "isConnected": marker.isConnected,
+        }
+
+    def encode_publishing_marker(self, marker):
+        type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
+        marker = marker.publishingMarker
+        return {
+            "type": type,
+            "userId": marker.userId,
+            "isPublishing": marker.isPublishing,
+        }
 
     def encode_speaking_marker(self, marker):
         type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]

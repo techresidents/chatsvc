@@ -32,7 +32,19 @@ struct MessageHeader {
 /* Chat Markers */
 
 enum MarkerType {
+    CONNECTED_MARKER,
+    PUBLISHING_MARKER,
     SPEAKING_MARKER,
+}
+
+struct ConnectedMarker {
+    1: string userId,
+    2: bool isConnected,
+}
+
+struct PublishingMarker {
+    1: string userId,
+    2: bool isPublishing,
 }
 
 struct SpeakingMarker {
@@ -42,7 +54,9 @@ struct SpeakingMarker {
 
 struct Marker {
     1: MarkerType type,
-    2: optional SpeakingMarker speakingMarker,
+    2: optional ConnectedMarker connectedMarker,
+    3: optional PublishingMarker publishingMarker,
+    4: optional SpeakingMarker speakingMarker,
 }
 
 
