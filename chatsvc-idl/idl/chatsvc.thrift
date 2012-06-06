@@ -3,6 +3,8 @@ namespace py trchatsvc.gen
 
 include "core.thrift"
 
+/* Message types */
+
 enum MessageType {
     TAG_CREATE = 100,
     TAG_DELETE = 101,
@@ -12,7 +14,11 @@ enum MessageType {
     WHITEBOARD_DELETE_PATH = 203,
     MINUTE_CREATE = 300,
     MINUTE_UPDATE = 301,
+    MARKER_CREATE = 400,
 }
+
+
+/* Message header */
 
 struct MessageHeader {
     1: optional string id,
@@ -20,6 +26,45 @@ struct MessageHeader {
     3: string chatSessionToken,
     4: i32 userId,
     5: i64 timestamp,
+}
+
+
+/* Chat Markers */
+
+enum MarkerType {
+    CONNECTED_MARKER,
+    PUBLISHING_MARKER,
+    SPEAKING_MARKER,
+}
+
+struct ConnectedMarker {
+    1: string userId,
+    2: bool isConnected,
+}
+
+struct PublishingMarker {
+    1: string userId,
+    2: bool isPublishing,
+}
+
+struct SpeakingMarker {
+    1: string userId,
+    2: bool isSpeaking,
+}
+
+struct Marker {
+    1: MarkerType type,
+    2: optional ConnectedMarker connectedMarker,
+    3: optional PublishingMarker publishingMarker,
+    4: optional SpeakingMarker speakingMarker,
+}
+
+
+/* Chat Messages */
+
+struct MarkerCreateMessage {
+    1: optional string markerId,
+    2: Marker marker,
 }
 
 struct MinuteCreateMessage {
@@ -38,7 +83,9 @@ struct MinuteUpdateMessage {
 
 struct TagCreateMessage {
     1: optional string tagId, 
-    2: string name,   
+    2: optional i32 tagReferenceId,   
+    3: string minuteId,   
+    4: string name, 
 }
 
 struct TagDeleteMessage {
@@ -75,7 +122,11 @@ struct Message {
     7: optional WhiteboardDeletePathMessage whiteboardDeletePathMessage,
     8: optional MinuteCreateMessage minuteCreateMessage,
     9: optional MinuteUpdateMessage minuteUpdateMessage,
+    10: optional MarkerCreateMessage markerCreateMessage,
 }
+
+
+/* Service interface */
 
 service TChatService extends core.TRService
 {
