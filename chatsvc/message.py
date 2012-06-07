@@ -8,82 +8,96 @@ from marker import MarkerFactory, MarkerEncoder
 
 class MessageFactory(object):
     def __init__(self):
-        pass
+        self.message_type_map = {
+            ttypes.MessageType.MARKER_CREATE: self.marker_create_message,
+            ttypes.MessageType.MINUTE_CREATE: self.minute_create_message,
+            ttypes.MessageType.MINUTE_UPDATE: self.minute_update_message,
+            ttypes.MessageType.TAG_CREATE: self.tag_create_message,
+            ttypes.MessageType.TAG_DELETE: self.tag_delete_message,
+            ttypes.MessageType.WHITEBOARD_CREATE: self.whiteboard_create_message,
+            ttypes.MessageType.WHITEBOARD_DELETE: self.whiteboard_delete_message,
+            ttypes.MessageType.WHITEBOARD_CREATE_PATH: self.whiteboard_create_path_message,
+            ttypes.MessageType.WHITEBOARD_DELETE_PATH: self.whiteboard_delete_path_message,
+        }
 
-    def create_header(self, chat_session_token, user_id, type, id=None, timestamp=None):
-        id = id or uuid.uuid4().hex
-        timestamp = timestamp or tz.timestamp()
+    def create(self, header, msg):
+        type = ttypes.MessageType._NAMES_TO_VALUES.get(header.get("type"))
+        factory_method = self.message_type_map.get(type)
+        return factory_method(header, msg)
 
+    def create_header(self, header):    
         return ttypes.MessageHeader(
-                id=id,
-                type=type,
-                chatSessionToken = chat_session_token,
-                userId=user_id,
-                timestamp=timestamp)
+                id=uuid.uuid4().hex,
+                type=ttypes.MessageType._NAMES_TO_VALUES.get(header.get("type")),
+                chatSessionToken=header.get("chatSessionToken"),
+                userId=header.get("userId"),
+                timestamp=tz.timestamp())
     
-    def marker_create_message(self, chat_session_token, user_id, marker):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.MARKER_CREATE)
+    def marker_create_message(self, header, msg):
+        header = self.create_header(header)
         message = ttypes.MarkerCreateMessage(
                 markerId=uuid.uuid4().hex,
-                marker=MarkerFactory.create(marker))
+                marker=MarkerFactory.create(msg.get("marker")))
         return ttypes.Message(header=header, markerCreateMessage=message)
 
-
-    def tag_create_message(self, chat_session_token, user_id, minute_id, name, tag_reference_id=None):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.TAG_CREATE)
-        message = ttypes.TagCreateMessage(
-                tagId=uuid.uuid4().hex,
-                minuteId=minute_id,
-                name=name,
-                tagReferenceId=tag_reference_id)
-        return ttypes.Message(header=header, tagCreateMessage=message)
-
-    def tag_delete_message(self, chat_session_token, user_id, tag_id):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.TAG_DELETE)
-        message = ttypes.TagDeleteMessage(tagId=tag_id)
-        return ttypes.Message(header=header, tagDeleteMessage=message)
-
-    def whiteboard_create_message(self, chat_session_token, user_id, name):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.WHITEBOARD_CREATE)
-        message = ttypes.WhiteboardCreateMessage(
-                whiteboardId=uuid.uuid4().hex,
-                name=name)
-        return ttypes.Message(header=header, whiteboardCreateMessage=message)
-
-    def whiteboard_delete_message(self, chat_session_token, user_id, whiteboard_id):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.WHITEBOARD_DELETE)
-        message = ttypes.WhiteboardDeleteMessage(whiteboardId=whiteboard_id)
-        return ttypes.Message(header=header, whiteboardDeleteMessage=message)
-
-    def whiteboard_create_path_message(self, chat_session_token, user_id, whiteboard_id, path_data):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.WHITEBOARD_CREATE_PATH)
-        message = ttypes.WhiteboardCreatePathMessage(
-                whiteboardId=whiteboard_id,
-                pathId=uuid.uuid4().hex,
-                pathData=path_data)
-        return ttypes.Message(header=header, whiteboardCreatePathMessage=message)
-
-    def whiteboard_delete_path_message(self, chat_session_token, user_id, whiteboard_id, path_id):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.WHITEBOARD_DELETE_PATH)
-        message = ttypes.WhiteboardDeletePathMessage(whiteboardId=whiteboard_id, pathId=path_id)
-        return ttypes.Message(header=header, whiteboardDeletePathMessage=message)
-
-    def minute_create_message(self, chat_session_token, user_id, topic_id):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.MINUTE_CREATE)
+    def minute_create_message(self, header, msg):
+        header = self.create_header(header)
         message = ttypes.MinuteCreateMessage(
                 minuteId=uuid.uuid4().hex,
-                topicId=topic_id,
+                topicId=msg.get("topicId"),
                 startTimestamp=tz.timestamp())
         return ttypes.Message(header=header, minuteCreateMessage=message)
 
-    def minute_update_message(self, chat_session_token, user_id, minute_id, topic_id, start_timestamp):
-        header = self.create_header(chat_session_token, user_id, ttypes.MessageType.MINUTE_UPDATE)
+    def minute_update_message(self, header, msg):
+        header = self.create_header(header)
         message = ttypes.MinuteUpdateMessage(
-                minuteId=minute_id,
-                topicId=topic_id,
-                startTimestamp=start_timestamp,
+                minuteId=msg.get("minuteId"),
+                topicId=msg.get("topicId"),
+                startTimestamp=msg.get("startTimestamp"),
                 endTimestamp=tz.timestamp())
         return ttypes.Message(header=header, minuteUpdateMessage=message)
+
+    def tag_create_message(self, header, msg):
+        header = self.create_header(header)
+        message = ttypes.TagCreateMessage(
+                tagId=uuid.uuid4().hex,
+                minuteId=msg.get("minuteId"),
+                name=msg.get("name"),
+                tagReferenceId=msg.get("tagReferenceId"))
+        return ttypes.Message(header=header, tagCreateMessage=message)
+
+    def tag_delete_message(self, header, msg):
+        header = self.create_header(header)
+        message = ttypes.TagDeleteMessage(tagId=msg.get("tagId"))
+        return ttypes.Message(header=header, tagDeleteMessage=message)
+
+    def whiteboard_create_message(self, header, msg):
+        header = self.create_header(header)
+        message = ttypes.WhiteboardCreateMessage(
+                whiteboardId=uuid.uuid4().hex,
+                name=msg.get("name"))
+        return ttypes.Message(header=header, whiteboardCreateMessage=message)
+
+    def whiteboard_delete_message(self, header, msg):
+        header = self.create_header(header)
+        message = ttypes.WhiteboardDeleteMessage(whiteboardId=msg.get("whiteboardId"))
+        return ttypes.Message(header=header, whiteboardDeleteMessage=message)
+
+    def whiteboard_create_path_message(self, header, msg):
+        header = self.create_header(header)
+        message = ttypes.WhiteboardCreatePathMessage(
+                whiteboardId=msg.get("whiteboardId"),
+                pathId=uuid.uuid4().hex,
+                pathData=msg.get("pathData"))
+        return ttypes.Message(header=header, whiteboardCreatePathMessage=message)
+
+    def whiteboard_delete_path_message(self, header, msg):
+        header = self.create_header(header)
+        message = ttypes.WhiteboardDeletePathMessage(
+                whiteboardId=msg.get("whiteboardId"),
+                pathId=msg.get("pathId"))
+        return ttypes.Message(header=header, whiteboardDeletePathMessage=message)
+
 
 
 class MessageEncoder(json.JSONEncoder):
