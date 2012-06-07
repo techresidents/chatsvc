@@ -24,15 +24,7 @@ from message import MessageFactory, MessageEncoder
 
 URL_HANDLERS = [
     (r'^/chat/messages$', 'handle_get_chat_messages'),
-    (r'^/chat/message/marker$', 'handle_marker_create'),
-    (r'^/chat/message/minute$', 'handle_minute_create'),
-    (r'^/chat/message/minute/(?P<minute_id>\w+)$', 'handle_minute_update'),
-    (r'^/chat/message/tag$', 'handle_tag_create'),
-    (r'^/chat/message/tag/(?P<tag_id>\w+)$', 'handle_tag_delete'),
-    (r'^/chat/message/whiteboard$', 'handle_whiteboard_create'),
-    (r'^/chat/message/whiteboard/(?P<whiteboard_id>\w+)$', 'handle_whiteboard_delete'),
-    (r'^/chat/message/whiteboard/(?P<whiteboard_id>\w+)/path$', 'handle_whiteboard_create_path'),
-    (r'^/chat/message/whiteboard/(?P<whiteboard_id>\w+)/path/(?P<path_id>\w+)$', 'handle_whiteboard_delete_path'),
+    (r'^/chat/message$', 'handle_post_chat_message'),
 ]
 
 class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
@@ -94,6 +86,7 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
     def handle_disconnect(self, request):
         pass
 
+
     @session_required
     def handle_get_chat_messages(self, request, session):
         request_context, chat_session_token = self._handle_message(request, session)
@@ -107,105 +100,21 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
         response = self.JsonResponse(data=json.dumps(messages, cls=MessageEncoder))
         return response
 
-    @session_required
-    def handle_marker_create(self, request, session):
-        request_context, chat_session_token = self._handle_message(request, session)
-        marker = request.data().get("marker")
-        message = self.message_factory.marker_create_message(
-                chat_session_token,
-                request_context.userId,
-                marker)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
 
     @session_required
-    def handle_minute_create(self, request, session):
-        request_context, chat_session_token = self._handle_message(request, session)
-        topic_id = request.data().get("topicId")
-        message = self.message_factory.minute_create_message(
-                chat_session_token,
-                request_context.userId,
-                topic_id)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
-
-    @session_required
-    def handle_minute_update(self, request, session, minute_id):
-        request_context, chat_session_token = self._handle_message(request, session)
-        topic_id = request.data().get("topicId")
-        start_timestamp = request.data().get("startTimestamp")
-        message = self.message_factory.minute_update_message(
-                chat_session_token,
-                request_context.userId,
-                minute_id,
-                topic_id,
-                start_timestamp)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
-
-    @session_required
-    def handle_tag_create(self, request, session):
+    def handle_post_chat_message(self, request, session):
         request_context, chat_session_token = self._handle_message(request, session)
 
-        #request parameters
-        name = request.data().get("name")
-        minute_id = request.data().get("minuteId")
-        tag_reference_id = request.data().get("tagReferenceId")
+        header = request.data().get("header")
+        header["userId"] = request_context.userId
+        header["chatSessionToken"] = chat_session_token
+        msg = request.data().get("msg")
 
-        message = self.message_factory.tag_create_message(
-                chat_session_token,
-                request_context.userId,
-                minute_id,
-                name,
-                tag_reference_id)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
+        message = self.message_factory.create(header, msg)
+        response = self.sendMessage(request_context, message)
+        result = self.JsonResponse(data=json.dumps(response, cls=MessageEncoder))
+        return result
 
-    @session_required
-    def handle_tag_delete(self, request, session, tag_id):
-        request_context, chat_session_token = self._handle_message(request, session)
-        message = self.message_factory.tag_delete_message(chat_session_token, request_context.userId, tag_id)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
-
-    @session_required
-    def handle_whiteboard_create(self, request, session):
-        request_context, chat_session_token = self._handle_message(request, session)
-        name = request.data().get("name")
-        message = self.message_factory.whiteboard_create_message(chat_session_token, request_context.userId, name)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
-
-    @session_required
-    def handle_whiteboard_delete(self, request, session, whiteboard_id):
-        request_context, chat_session_token = self._handle_message(request, session)
-        message = self.message_factory.whiteboard_delete_message(chat_session_token, request_context.userId, whiteboard_id)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
-
-    @session_required
-    def handle_whiteboard_create_path(self, request, session, whiteboard_id):
-        request_context, chat_session_token = self._handle_message(request, session)
-        path_data = request.data().get("pathData")
-        message = self.message_factory.whiteboard_create_path_message(chat_session_token, request_context.userId, whiteboard_id, path_data)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
-
-    @session_required
-    def handle_whiteboard_delete_path(self, request, session, whiteboard_id, path_id):
-        request_context, chat_session_token = self._handle_message(request, session)
-        message = self.message_factory.whiteboard_delete_path_message(chat_session_token, request_context.userId, whiteboard_id, path_id)
-        message = self.sendMessage(request_context, message)
-        response = self.JsonResponse(data=json.dumps(message, cls=MessageEncoder))
-        return response
 
     def getMessages(self, requestContext, chatSessionToken, asOf, block, timeout):
         chat_session = self._get_chat_session(chatSessionToken)
