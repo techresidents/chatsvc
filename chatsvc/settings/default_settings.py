@@ -47,7 +47,7 @@ LOGGING = {
     "handlers": {
 
         "console_handler": {
-            "level": "ERROR",
+            "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "brief_formatter",
             "stream": "ext://sys.stdout"
