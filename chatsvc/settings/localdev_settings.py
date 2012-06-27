@@ -1,11 +1,25 @@
-#!/usr/bin/env python
+import hashlib
+import socket
 
 from default_settings import *
 
-ENV="localdev"
+ENV = "localdev"
+
+#Server settings
+SERVER_HOST = socket.gethostname()
+SERVER_INTERFACE = "0.0.0.0"
+SERVER_PORT = 9090
 
 #Service settings
 SERVICE_PID_FILE = "/opt/30and30/data/%s/pid/%s.%s.pid" % (SERVICE, SERVICE, ENV)
+
+#Zookeeper settings
+ZOOKEEPER_HOSTS = ["localhost:2181"]
+
+#Mongrel settings
+MONGREL_SENDER_ID = "chatsvc_" + hashlib.sha1(SERVER_HOST+str(SERVER_PORT)).hexdigest()
+MONGREL_PUB_ADDR = "tcp://localhost:9996"
+MONGREL_PULL_ADDR = "tcp://localhost:9997"
 
 #Logging settings
 LOGGING = {
@@ -46,4 +60,3 @@ LOGGING = {
         "handlers": ["console_handler", "file_handler"]
     }
 }
-

@@ -10,7 +10,7 @@ import gevent.queue
 
 from trpycore import riak_gevent
 from trpycore.riak_common.factory import RiakClientFactory
-from trsvcscore.mongrel2.decorator import session_required
+from trsvcscore.mongrel2.decorator import session_required, non_authenticated_session_required
 from trsvcscore.service_gevent.handler import GMongrel2Handler
 from trsvcscore.session.riak import RiakSessionStorePool
 from trsvcscore.hashring.zookeeper import ZookeeperServiceHashring
@@ -71,7 +71,8 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
     
     def _handle_message(self, request, session):
         session_data = session.get_data()
-        user_id = session_data["_auth_user_id"]
+        #user_id = session.user_id()
+        user_id = session_data["chat_session"]["user_id"]
         chat_session_token = session_data["chat_session"]["chat_session_token"]
 
         request_context = RequestContext(userId = user_id, sessionId = session.get_key())
