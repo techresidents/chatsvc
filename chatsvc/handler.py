@@ -88,7 +88,7 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
         pass
 
 
-    @non_authenticated_session_required
+    @session_required
     def handle_get_chat_messages(self, request, session):
         request_context, chat_session_token = self._handle_message(request, session)
         asOf = float(request.param("asOf"))
@@ -102,7 +102,7 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
         return response
 
 
-    @non_authenticated_session_required
+    @session_required
     def handle_post_chat_message(self, request, session):
         request_context, chat_session_token = self._handle_message(request, session)
 
