@@ -6,21 +6,21 @@
     <parent>
         <groupId>com.techresidents.services.core.java</groupId>
         <artifactId>services-pom</artifactId>
-        <version>0.3.0</version>
+        <version>0.4.0</version>
     </parent>
 
     <groupId>com.techresidents.services.chatsvc</groupId>
     <artifactId>chatsvc-idl</artifactId>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
     <packaging>pom</packaging>
 
     <name>chatsvc idl</name>
     <inceptionYear>2012</inceptionYear>
 
     <scm>
-        <connection>scm:git:git://dev.30and30.com/30and30/repos/techresidents/services/chatsvc.git</connection>
-        <developerConnection>scm:git:git://dev.30and30.com/30and30/repos/techresidents/services/chatsvc.git</developerConnection>
-        <url>scm:git:git://dev.30and30.com/30and30/repos/techresidents/services/chatsvc.git</url>
+        <connection>scm:git:git://dev.techresidents.com/tr/repos/techresidents/services/chatsvc.git</connection>
+        <developerConnection>scm:git:git://dev.techresidents.com/tr/repos/techresidents/services/chatsvc.git</developerConnection>
+        <url>scm:git:git://dev.techresidents.com/tr/repos/techresidents/services/chatsvc.git</url>
     </scm>
 
     <profiles>
