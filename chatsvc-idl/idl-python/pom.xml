@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.techresidents.services.chatsvc</groupId>
         <artifactId>chatsvc-idl</artifactId>
-        <version>0.9-SNAPSHOT</version>
+        <version>0.9.0</version>
     </parent>
 
     <artifactId>chatsvc-idl-python</artifactId>
