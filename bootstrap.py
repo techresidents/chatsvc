@@ -36,7 +36,7 @@ def main(argv):
             os.putenv("CFLAGS", "-I/opt/local/include")
         else:
             os.putenv("CFLAGS", "-I/opt/3ps/include -L/opt/3ps/lib64 -L/opt/3ps/lib")
-            os.putenv("LIBRARY_PATH", "/opt/3ps/lib64:/opt/3ps/lib")
+            os.putenv("LIBRARY_PATH", "$LIBRARY_PATH:/opt/3ps/lib64:/opt/3ps/lib")
 
         subprocess.call(["pip", "install", "--requirement", args.requirements])
 
