@@ -1,7 +1,8 @@
 pytz
 thrift==0.8.0
 pyzmq==2.1.11
-greenlet==0.3.4
+#greenlet==0.3.4
+greenlet==0.4.0
 gevent==0.13.6
 gevent-zeromq==0.2.2
 git+https://github.com/basho/riak-python-client.git@1.4.0#egg=riak
