@@ -21,6 +21,12 @@ MONGREL_SENDER_ID = "chatsvc_" + hashlib.sha1(SERVER_HOST+str(SERVER_PORT)).hexd
 MONGREL_PUB_ADDR = "tcp://localhost:9996"
 MONGREL_PULL_ADDR = "tcp://localhost:9997"
 
+#Riak settings
+RIAK_HOST = "localhost"
+RIAK_PORT = 8087
+RIAK_SESSION_BUCKET = "tr_sessions"
+RIAK_SESSION_POOL_SIZE = 4
+
 #Logging settings
 LOGGING = {
     "version": 1,
