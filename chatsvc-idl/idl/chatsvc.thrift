@@ -25,7 +25,7 @@ struct MessageHeader {
     2: MessageType type,
     3: string chatSessionToken,
     4: i32 userId,
-    5: i64 timestamp,
+    5: double timestamp,
 }
 
 
@@ -39,22 +39,22 @@ enum MarkerType {
 }
 
 struct JoinedMarker {
-    1: string userId,
+    1: i32 userId,
     2: string name,
 }
 
 struct ConnectedMarker {
-    1: string userId,
+    1: i32 userId,
     2: bool isConnected,
 }
 
 struct PublishingMarker {
-    1: string userId,
+    1: i32 userId,
     2: bool isPublishing,
 }
 
 struct SpeakingMarker {
-    1: string userId,
+    1: i32 userId,
     2: bool isSpeaking,
 }
 
@@ -76,14 +76,14 @@ struct MarkerCreateMessage {
 
 struct MinuteCreateMessage {
     1: optional string minuteId, 
-    2: string topicId,   
+    2: i32 topicId,   
     3: optional i64 startTimestamp,
     4: optional i64 endTimestamp,
 }
 
 struct MinuteUpdateMessage {
     1: string minuteId, 
-    2: string topicId,   
+    2: i32 topicId,   
     3: i64 startTimestamp,
     4: optional i64 endTimestamp,
 }
@@ -133,16 +133,40 @@ struct Message {
 }
 
 
+/* Hash Ring */
+
+struct HashRingNode {
+    1: string token,
+    2: string serviceName,
+    3: i32 servicePort,
+    4: string hostname,
+    5: string fqdn,
+}
+
+
 /* Service interface */
 
 service TChatService extends core.TRService
 {
+    list<HashRingNode> getHashRing(1: core.RequestContext requestContext),
+    
+    list<HashRingNode> getPreferenceList(
+            1: core.RequestContext requestContext,
+            2: string chatSessionToken),
+
     list<Message> getMessages(
             1: core.RequestContext requestContext,
             2: string chatSessionToken,
-            3: i64 asOf,
+            3: double asOf,
             4: bool block,
             5: i32 timeout),
 
-    Message sendMessage(1: core.RequestContext requestContext, 2: Message message),
+    Message sendMessage(
+            1: core.RequestContext requestContext,
+            2: Message message),
+
+    void storeReplicatedMessages(
+            1: core.RequestContext requestContext,
+            2: string chatSessionToken,
+            3: list<Message> messages),
 }

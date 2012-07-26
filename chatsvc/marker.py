@@ -5,7 +5,7 @@ import trchatsvc.gen.ttypes as ttypes
 def create_joined_marker(marker):
     return ttypes.Marker(
             type=ttypes.MarkerType.JOINED_MARKER,
-            connectedMarker=ttypes.JoinedMarker(
+            joinedMarker=ttypes.JoinedMarker(
                 userId=marker.get("userId"),
                 name=marker.get("name")
                 )
@@ -75,7 +75,7 @@ class MarkerEncoder(json.JSONEncoder):
     
     def encode_joined_marker(self, marker):
         type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
-        marker = marker.connectedMarker
+        marker = marker.joinedMarker
         return {
             "type": type,
             "userId": marker.userId,

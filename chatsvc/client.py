@@ -1,25 +1,51 @@
+import logging
 import sys
+import time
  
-from thrift import Thrift
-from thrift.protocol import TBinaryProtocol
- 
+from trpycore.zookeeper.client import ZookeeperClient
+from trsvcscore.proxy.zookeeper import ZookeeperServiceProxy
+from trsvcscore.hashring.zookeeper import ZookeeperServiceHashring
 
-from trpycore.thrift_gevent.transport import TSocket
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
 
+
 def main(argv):
- transport = TSocket.TSocket('localhost', 9090)
- protocol = TBinaryProtocol.TBinaryProtocol(transport)
- client = TChatService.Client(protocol)
- transport.open()
-  
- context = RequestContext(userId=0, impersonatingUserId=0, sessionId="sessionid", context="")
-  
- print client.getVersion(context)
- print client.getBuildNumber(context)
- print client.getMessages(context, 0, False, 0)
- #client.shutdown(context)
- 
+    logging.basicConfig()
+    try:
+        zookeeper_client = ZookeeperClient(["localdev:2181"])
+        zookeeper_client.start()
+        time.sleep(1)
+        chatsvc = ZookeeperServiceProxy(zookeeper_client, "chatsvc", TChatService, keepalive=True)
+
+        context = RequestContext(userId=0, impersonatingUserId=0, sessionId="sessionid", context="")
+
+        hashring = ZookeeperServiceHashring(
+                zookeeper_client=zookeeper_client,
+                service_name="chatsvc",
+                service_port = 9091,
+                positions = [None, None, None],
+                data = {"blah": "blah" })
+        hashring.start()
+        time.sleep(1)
+        
+        while True:
+            try:
+                print chatsvc.getVersion(context)
+            except Exception as error:
+                print str(error)
+
+            nodes = hashring.hashring()
+            for node in nodes:
+                print node.token
+                print node.data
+            time.sleep(3)
+    
+    except Exception as error:
+        print str(error)
+    finally:
+        zookeeper_client.stop()            
+        zookeeper_client.join()
+
 if __name__ == '__main__':
- sys.exit(main(sys.argv))
+    sys.exit(main(sys.argv))
