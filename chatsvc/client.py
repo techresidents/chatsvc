@@ -25,13 +25,13 @@ def main(argv):
                 service_name="chatsvc",
                 service_port = 9091,
                 positions = [None, None, None],
-                data = {"blah": "blah" })
-        hashring.start()
+                position_data = {"blah": "blah" })
+        #hashring.start()
         time.sleep(1)
         
         while True:
             try:
-                print chatsvc.getVersion(context)
+                print chatsvc.getCounters(context)
             except Exception as error:
                 print str(error)
 

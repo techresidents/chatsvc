@@ -103,25 +103,41 @@ class Replicator(object):
         preference_list = nodes or self._preference_list(chat_session_token)
         preference_queue = deque(preference_list)
         
-        semaphore = gevent.coros.Semaphore(N-1)
+        NN = 1
+        print 'NN:%s' % NN
+        semaphore = gevent.coros.Semaphore(NN)
+        print 'counter: %s' % semaphore.counter
         def release(greenlet):
+            print 'release'
             semaphore.release()
+            print 'release-counter: %s' % semaphore.counter
 
         while True:
             try:
                 semaphore.acquire()
+                print 'acquire'
+                print 'acquire-counter: %s' % semaphore.counter
+                print 'completed: %s' % result.completed()
+                print 'len: %s' % len(result.values)
                 if not preference_queue or result.completed():
+                    print 'leaving'
+                    print 'release'
                     semaphore.release()
+                    print 'release-counter: %s' % semaphore.counter
                     break
                 node = preference_queue.popleft()
                 if self._remote_node(node):
+                    print 'remote node'
                     proxy_pool = self._service_proxy_pool(node)
                     worker = gevent.spawn(self._replicate_to_node, chat_session_token, messages, proxy_pool, result)
                     #worker.link(lambda greenlet: semaphore.release())
                     worker.link(release)
                     workers.append(worker)
                 else:
+                    print 'not remote node'
+                    print 'release'
                     semaphore.release()
+                    print 'release-counter: %s' % semaphore.counter
             except Exception as error:
                 logging.exception(error)
                 semaphore.release()
@@ -129,17 +145,19 @@ class Replicator(object):
     def _replicate_to_node(self, chat_session_token, messages, service_proxy_pool, result):
         try:
             with service_proxy_pool.get() as proxy:
+                print 'replicating to node %s:%s' % (proxy.service_hostname, proxy.service_port)
                 context = self._request_context()
                 proxy.storeReplicatedMessages(context, chat_session_token, messages)
                 result.set(None)
+                print 'done replicating to node %s:%s' % (proxy.service_hostname, proxy.service_port)
         except Exception as error:
             logging.exception(error)
             result.set_exception(error)
 
     def _replication_nodes(self, previous_hashring, current_hashring, chat_session_token):
         result = []
-        current_preference_list = self._preference_list(chat_session_token, current_hashring)
-        previous_preference_list = self._preference_list(chat_session_token, previous_hashring)
+        current_preference_list = self._preference_list(chat_session_token, current_hashring)[:self.N]
+        previous_preference_list = self._preference_list(chat_session_token, previous_hashring)[:self.N]
         previous_service_keys = {n.service_key: True for n in previous_preference_list}
         print previous_service_keys
 

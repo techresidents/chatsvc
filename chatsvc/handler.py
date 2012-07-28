@@ -62,12 +62,12 @@ class ChatServiceHandler(TChatService.Iface, GMongrel2Handler):
                 service_name=settings.SERVICE,
                 service_port=settings.SERVER_PORT,
                 positions=[None, None, None],
-                data={"hostname": "localhost"})
+                position_data={"hostname": "localhost"})
 
         self.replicator = GreenletPoolReplicator(
                 self,
                 size=20,
-                N=2,
+                N=3,
                 W=1,
                 max_connections_per_service=1)
 
