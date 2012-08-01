@@ -51,7 +51,7 @@ LOGGING = {
         },
 
         "file_handler": {
-            "level": "DEBUG",
+            "level": "INFO",
             "class": "logging.handlers.TimedRotatingFileHandler",
             "formatter": "long_formatter",
             "filename": "/opt/tr/data/%s/logs/%s.%s.log" % (SERVICE, SERVICE, ENV),
@@ -62,7 +62,7 @@ LOGGING = {
     },
     
     "root": {
-        "level": "DEBUG",
+        "level": "INFO",
         "handlers": ["console_handler", "file_handler"]
     }
 }

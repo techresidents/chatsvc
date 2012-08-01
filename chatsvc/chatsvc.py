@@ -2,33 +2,56 @@
 
 import logging
 import logging.config
+import os
 import signal
+import socket
 import sys
 import gevent
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+sys.path.insert(0, PROJECT_ROOT)
+
 import settings
+import version
 
 from trpycore.process.pid import pidfile, PidFileException
-from trsvcscore.service_gevent.base import GMongrel2Service
+from trsvcscore.service_gevent.default import GDefaultService
+from trsvcscore.service_gevent.server.default import GThriftServer
+from trsvcscore.service_gevent.server.mongrel2 import GMongrel2Server
 from trchatsvc.gen import TChatService
 
-from handler import ChatServiceHandler
+from handler import ChatServiceHandler, ChatMongrel2Handler
 
 
-class ChatService(GMongrel2Service):
+class ChatService(GDefaultService):
     def __init__(self):
+        handler = ChatServiceHandler(self)
 
-        handler = ChatServiceHandler()
+        server = GThriftServer(
+                name="%s-thrift" % settings.SERVICE,
+                interface=settings.THRIFT_SERVER_INTERFACE,
+                port=settings.THRIFT_SERVER_PORT,
+                handler=handler,
+                processor=TChatService.Processor(handler),
+                #address=socket.gethostname())
+                address="localhost")
+
+        mongrel2_handler = ChatMongrel2Handler(handler)
+        mongrel2_server = GMongrel2Server(
+                name="%s-mongrel" % settings.SERVICE,
+                mongrel2_sender_id=settings.MONGREL_SENDER_ID,
+                mongrel2_pull_addr=settings.MONGREL_PULL_ADDR,
+                mongrel2_pub_addr=settings.MONGREL_PUB_ADDR,
+                handler=mongrel2_handler)
 
         super(ChatService, self).__init__(
                 name=settings.SERVICE,
-                interface=settings.SERVER_INTERFACE,
-                port=settings.SERVER_PORT,
-                handler=handler,
-                processor=TChatService.Processor(handler),
-                mongrel2_sender_id=settings.MONGREL_SENDER_ID,
-                mongrel2_pull_addr=settings.MONGREL_PULL_ADDR,
-                mongrel2_pub_addr=settings.MONGREL_PUB_ADDR)
+                version=version.VERSION,
+                build=version.BUILD,
+                servers=[server, mongrel2_server],
+                #hostname=socket.gethostname(),
+                hostname="localhost",
+                fqdn=socket.getfqdn())
  
 def main(argv):
     try:

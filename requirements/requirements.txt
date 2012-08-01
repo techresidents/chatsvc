@@ -10,5 +10,5 @@ git+ssh://dev.techresidents.com/tr/repos/techresidents/lib/python/zookeeper.git@
 git+ssh://dev.techresidents.com/tr/repos/techresidents/lib/python/trpycore.git@integration#egg=trpycore
 git+ssh://dev.techresidents.com/tr/repos/techresidents/services/core/python/trsvcscore.git@integration#egg=trsvcscore
 
-http://nexus.dev.techresidents.com/content/groups/public/com/techresidents/services/core/idl/idl-core-python/0.3.0/idl-core-python-0.3.0-bin.tar.gz#egg=tridlcore
+http://nexus.dev.techresidents.com/content/groups/public/com/techresidents/services/core/idl/idl-core-python/0.7.0/idl-core-python-0.7.0-bin.tar.gz#egg=tridlcore
 http://nexus.dev.techresidents.com/content/groups/public/com/techresidents/services/chatsvc/chatsvc-idl-python/0.12-SNAPSHOT/chatsvc-idl-python-0.12-SNAPSHOT-bin.tar.gz#egg=trchatsvc

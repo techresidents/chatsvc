@@ -32,6 +32,7 @@ def main(argv):
         while True:
             try:
                 print chatsvc.getCounters(context)
+                print chatsvc.getStatus(context)
             except Exception as error:
                 print str(error)
 

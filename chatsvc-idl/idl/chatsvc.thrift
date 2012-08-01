@@ -133,9 +133,9 @@ struct Message {
 }
 
 
-/* Hash Ring */
+/* Hashring */
 
-struct HashRingNode {
+struct HashringNode {
     1: string token,
     2: string serviceName,
     3: i32 servicePort,
@@ -143,14 +143,31 @@ struct HashRingNode {
     5: string fqdn,
 }
 
+/* Replication */
+
+/* Chat Session Snapshot */
+struct ChatSessionSnapshot {
+    1: string token,
+    2: double startTimestamp,
+    3: double endTimestamp,
+    4: list<Message> messages,
+    5: bool completed,
+    6: bool persisted,
+}
+
+struct ReplicationSnapshot {
+    1: bool fullSnapshot,
+    2: ChatSessionSnapshot chatSessionSnapshot,
+}
+
 
 /* Service interface */
 
 service TChatService extends core.TRService
 {
-    list<HashRingNode> getHashRing(1: core.RequestContext requestContext),
+    list<HashringNode> getHashring(1: core.RequestContext requestContext),
     
-    list<HashRingNode> getPreferenceList(
+    list<HashringNode> getPreferenceList(
             1: core.RequestContext requestContext,
             2: string chatSessionToken),
 
@@ -165,8 +182,7 @@ service TChatService extends core.TRService
             1: core.RequestContext requestContext,
             2: Message message),
 
-    void storeReplicatedMessages(
+    void replicate(
             1: core.RequestContext requestContext,
-            2: string chatSessionToken,
-            3: list<Message> messages),
+            2: ReplicationSnapshot replicationSnapshot),
 }

@@ -3,10 +3,15 @@ import bisect
 from gevent.event import Event
 
 class ChatSession(object):
-    def __init__(self, chat_session_token):
-        self.id = chat_session_token
+    def __init__(self, chat_session_token, start_timestamp=None, end_timestamp=None):
         self.token = chat_session_token
+        self.start_timestamp = start_timestamp or 0
+        self.end_timestamp = end_timestamp or 0
+        self.completed = False
+        self.persisted = False
+
         self.event = Event()
+
         self.messages = []
         self.message_timestamps = []
         self.message_history = {}
@@ -19,7 +24,6 @@ class ChatSession(object):
             self.messages.insert(index, message)
     
     def trigger_messages(self):
-        print "trigger messages"
         self.event.set()
         self.event.clear()
 
@@ -37,15 +41,11 @@ class ChatSession(object):
     def send_message(self, message):
         if message.header.id not in self.message_history:
             self._store_message(message)
-            print len(self.messages)
             self.trigger_messages()
 
     def store_replicated_message(self, message):
         if message.header.id not in self.message_history:
             self._store_message(message)
-            print len(self.messages)
-    
-
 
 class ChatSessionsManager(object):
     def __init__(self):

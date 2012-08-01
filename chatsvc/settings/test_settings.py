@@ -12,15 +12,15 @@ SERVICE = "chatsvc"
 SERVICE_PID_FILE = "%s.%s-%s.pid" % (SERVICE, ENV, INSTANCE)
 
 #Server settings
-SERVER_HOST = socket.gethostname()
-SERVER_INTERFACE = "0.0.0.0"
-SERVER_PORT = 9090 + INSTANCE
+THRIFT_SERVER_HOST = socket.gethostname()
+THRIFT_SERVER_INTERFACE = "0.0.0.0"
+THRIFT_SERVER_PORT = 9090 + INSTANCE
 
 #Zookeeper settings
 ZOOKEEPER_HOSTS = ["localdev:2181"]
 
 #Mongrel settings
-MONGREL_SENDER_ID = "chatsvc_" + hashlib.sha1(SERVER_HOST+str(SERVER_PORT)).hexdigest()
+MONGREL_SENDER_ID = "chatsvc_" + hashlib.sha1(THRIFT_SERVER_HOST+str(THRIFT_SERVER_PORT)).hexdigest()
 MONGREL_PUB_ADDR = "tcp://localdev:9996"
 MONGREL_PULL_ADDR = "tcp://localdev:9997"
 
@@ -32,6 +32,15 @@ RIAK_SESSION_POOL_SIZE = 4
 
 #Chat settings
 CHAT_LONG_POLL_WAIT = 10
+CHAT_ALLOW_REQUEST_FORWARDING = True
+
+#Replication settings
+REPLICATION_N = 2
+REPLICATION_W = 1
+REPLICATION_POOL_SIZE = 20
+REPLICATION_TIMEOUT = 10
+REPLICATION_MAX_CONNECTIONS_PER_SERVICE = 1
+REPLICATION_ALLOW_SAME_HOST = True
 
 #Logging settings
 LOGGING = {
