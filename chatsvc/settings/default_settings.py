@@ -19,7 +19,7 @@ THRIFT_SERVER_PORT = 9090
 ZOOKEEPER_HOSTS = ["localdev:2181"]
 
 #Mongrel settings
-MONGREL_SENDER_ID = "chatsvc_" + hashlib.sha1(THRIFT_SERVER_ADDRESS+str(THRIFT_SERVER_PORT)).hexdigest()
+MONGREL_SENDER_ID = "chatsvc_" + hashlib.md5(THRIFT_SERVER_ADDRESS+str(THRIFT_SERVER_PORT)).hexdigest()
 MONGREL_PUB_ADDR = "tcp://localdev:9996"
 MONGREL_PULL_ADDR = "tcp://localdev:9997"
 
