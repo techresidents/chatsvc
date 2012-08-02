@@ -7,7 +7,7 @@ ENV = "localdev"
 
 #Service Settings
 SERVICE = "chatsvc"
-SERVICE_PID_FILE = "%s.%s.pid" % (SERVICE, ENV)
+SERVICE_PID_FILE = "/opt/tr/data/%s/pid/%s.%s.pid" % (SERVICE, SERVICE, ENV)
 SERVICE_HOSTNAME = socket.gethostname()
 SERVICE_FQDN = socket.gethostname()
 SERVER_HOST = socket.gethostname()
@@ -16,9 +16,6 @@ SERVER_HOST = socket.gethostname()
 THRIFT_SERVER_ADDRESS = socket.gethostname()
 THRIFT_SERVER_INTERFACE = "0.0.0.0"
 THRIFT_SERVER_PORT = 9090
-
-#Service settings
-SERVICE_PID_FILE = "/opt/tr/data/%s/pid/%s.%s.pid" % (SERVICE, SERVICE, ENV)
 
 #Zookeeper settings
 ZOOKEEPER_HOSTS = ["localhost:2181"]
