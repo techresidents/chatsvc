@@ -6,6 +6,12 @@ from trpycore.timezone import tz
 
 from marker import MarkerFactory, MarkerEncoder
 
+def as_int(n):
+    result = None
+    if n is not None:
+       result = int(n)
+    return result
+
 class MessageFactory(object):
     def __init__(self):
         self.message_type_map = {
@@ -30,7 +36,7 @@ class MessageFactory(object):
                 id=uuid.uuid4().hex,
                 type=ttypes.MessageType._NAMES_TO_VALUES.get(header.get("type")),
                 chatSessionToken=header.get("chatSessionToken"),
-                userId=header.get("userId"),
+                userId=as_int(header.get("userId")),
                 timestamp=tz.timestamp())
     
     def marker_create_message(self, header, msg):
@@ -44,7 +50,7 @@ class MessageFactory(object):
         header = self.create_header(header)
         message = ttypes.MinuteCreateMessage(
                 minuteId=uuid.uuid4().hex,
-                topicId=msg.get("topicId"),
+                topicId=as_int(msg.get("topicId")),
                 startTimestamp=tz.timestamp())
         return ttypes.Message(header=header, minuteCreateMessage=message)
 
@@ -63,7 +69,7 @@ class MessageFactory(object):
                 tagId=uuid.uuid4().hex,
                 minuteId=msg.get("minuteId"),
                 name=msg.get("name"),
-                tagReferenceId=msg.get("tagReferenceId"))
+                tagReferenceId=as_int(msg.get("tagReferenceId")))
         return ttypes.Message(header=header, tagCreateMessage=message)
 
     def tag_delete_message(self, header, msg):
