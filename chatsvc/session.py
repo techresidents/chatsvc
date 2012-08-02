@@ -3,6 +3,8 @@ import bisect
 from gevent.event import Event
 
 class ChatSession(object):
+    """Chat session class."""
+
     def __init__(self, chat_session_token, start_timestamp=None, end_timestamp=None):
         self.token = chat_session_token
         self.start_timestamp = start_timestamp or 0
@@ -48,6 +50,8 @@ class ChatSession(object):
             self._store_message(message)
 
 class ChatSessionsManager(object):
+    """Chat sessions manager."""
+
     def __init__(self):
         self._chat_sessions = {}
 

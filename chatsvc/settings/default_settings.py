@@ -7,6 +7,8 @@ ENV = os.getenv("SERVICE_ENV", "default")
 #Service Settings
 SERVICE = "chatsvc"
 SERVICE_PID_FILE = "%s.%s.pid" % (SERVICE, ENV)
+SERVICE_HOSTNAME = socket.gethostname()
+SERVICE_FQDN = socket.gethostname()
 
 #Thrift Server settings
 THRIFT_SERVER_ADDRESS = socket.gethostname()
@@ -38,6 +40,7 @@ REPLICATION_POOL_SIZE = 20
 REPLICATION_TIMEOUT = 10
 REPLICATION_MAX_CONNECTIONS_PER_SERVICE = 1
 REPLICATION_ALLOW_SAME_HOST = True
+REPLICATION_TIMEOUT = 5
 
 #Logging settings
 LOGGING = {

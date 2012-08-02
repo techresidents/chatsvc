@@ -571,6 +571,9 @@ class Replicator(object):
             event: ServiceHashringEvent object
         """
         if event.event_type == ServiceHashringEvent.CHANGED_EVENT:
+            self.log.info("Hashring change ...")
+            self.log.info("Previous hashring: [\n%s\n]" % nodes_to_string(event.previous_hashring))
+            self.log.info("Current hashring: [\n%s\n]" % nodes_to_string(event.current_hashring))
             self.replicate_node_change(event.previous_hashring, event.current_hashring)
     
 
@@ -659,6 +662,9 @@ class GreenletPoolReplicator(Replicator):
     def start(self):
         """Start replicator."""
         if not self.running:
+            self.log.info("Starting %s(N=%s, W=%s, size=%s) ..." % (
+                self.__class__.__name__, self.N, self.W, self.size))
+
             self.running = True
             for i in range(0, self.size):
                 worker = gevent.spawn(self.run)
@@ -686,6 +692,9 @@ class GreenletPoolReplicator(Replicator):
     def stop(self):
         """Stop replicator."""
         if self.running:
+            self.log.info("Stopping %s(N=%s, W=%s, size=%s) ..." % (
+                self.__class__.__name__, self.N, self.W, self.size))
+
             self.running = False
             for i in range(0, self.size):
                 self.queue.put(self.STOP_ITEM)
@@ -774,9 +783,12 @@ class GreenletPoolReplicator(Replicator):
 
             #Get the new nodes needing the data.
             #Note that this will only return us nodes for chat sessions
-            #which are currently or were previously responsible for.
+            #which we are currently or were previously responsible for.
             replication_nodes = self._replication_nodes(previous_hashring, current_hashring, chat_session_token)
             if replication_nodes:
+                #Note that we add 1 to N/W, to adjust for our copy of the data.
+                #Adding one to N/W will force the data to be replicated
+                #to all nodes in replication_nodes.
                 self.replicate(
                         chat_session=chat_session,
                         messages=chat_session.messages,

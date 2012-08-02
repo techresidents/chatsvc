@@ -3,6 +3,13 @@ namespace py trchatsvc.gen
 
 include "core.thrift"
 
+/* Exceptions */
+
+exception UnavailableException {
+    1: string fault,
+}
+
+
 /* Message types */
 
 enum MessageType {
@@ -138,9 +145,10 @@ struct Message {
 struct HashringNode {
     1: string token,
     2: string serviceName,
-    3: i32 servicePort,
-    4: string hostname,
-    5: string fqdn,
+    3: string serviceAddress,
+    4: i32 servicePort,
+    5: string hostname,
+    6: string fqdn,
 }
 
 /* Replication */
@@ -176,11 +184,13 @@ service TChatService extends core.TRService
             2: string chatSessionToken,
             3: double asOf,
             4: bool block,
-            5: i32 timeout),
+            5: i32 timeout) throws (1:UnavailableException e),
 
     Message sendMessage(
             1: core.RequestContext requestContext,
-            2: Message message),
+            2: Message message,
+            3: i32 N,
+            4: i32 W) throws (1:UnavailableException e), 
 
     void replicate(
             1: core.RequestContext requestContext,

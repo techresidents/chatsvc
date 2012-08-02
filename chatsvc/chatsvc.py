@@ -4,10 +4,10 @@ import logging
 import logging.config
 import os
 import signal
-import socket
 import sys
 import gevent
 
+#Add PROJECT_ROOT to python path, for version import.
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -24,6 +24,7 @@ from handler import ChatServiceHandler, ChatMongrel2Handler
 
 
 class ChatService(GDefaultService):
+    """Chat service."""
     def __init__(self):
         handler = ChatServiceHandler(self)
 
@@ -33,8 +34,7 @@ class ChatService(GDefaultService):
                 port=settings.THRIFT_SERVER_PORT,
                 handler=handler,
                 processor=TChatService.Processor(handler),
-                #address=socket.gethostname())
-                address="localhost")
+                address=settings.THRIFT_SERVER_ADDRESS)
 
         mongrel2_handler = ChatMongrel2Handler(handler)
         mongrel2_server = GMongrel2Server(
@@ -49,9 +49,8 @@ class ChatService(GDefaultService):
                 version=version.VERSION,
                 build=version.BUILD,
                 servers=[server, mongrel2_server],
-                #hostname=socket.gethostname(),
-                hostname="localhost",
-                fqdn=socket.getfqdn())
+                hostname=settings.SERVICE_HOSTNAME,
+                fqdn=settings.SERVICE_FQDN)
  
 def main(argv):
     try:

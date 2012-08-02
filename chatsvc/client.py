@@ -4,14 +4,13 @@ import time
  
 from trpycore.zookeeper.client import ZookeeperClient
 from trsvcscore.proxy.zookeeper import ZookeeperServiceProxy
-from trsvcscore.hashring.zookeeper import ZookeeperServiceHashring
 
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
 
 
 def main(argv):
-    logging.basicConfig()
+    logging.basicConfig(level=logging.DEBUG)
     try:
         zookeeper_client = ZookeeperClient(["localdev:2181"])
         zookeeper_client.start()
@@ -20,26 +19,14 @@ def main(argv):
 
         context = RequestContext(userId=0, impersonatingUserId=0, sessionId="sessionid", context="")
 
-        hashring = ZookeeperServiceHashring(
-                zookeeper_client=zookeeper_client,
-                service_name="chatsvc",
-                service_port = 9091,
-                positions = [None, None, None],
-                position_data = {"blah": "blah" })
-        #hashring.start()
-        time.sleep(1)
-        
         while True:
             try:
-                print chatsvc.getCounters(context)
-                print chatsvc.getStatus(context)
+                print chatsvc.getHashring(context)
+                print "\n"
+                print chatsvc.getPreferenceList(context, '0')
             except Exception as error:
                 print str(error)
 
-            nodes = hashring.hashring()
-            for node in nodes:
-                print node.token
-                print node.data
             time.sleep(3)
     
     except Exception as error:
