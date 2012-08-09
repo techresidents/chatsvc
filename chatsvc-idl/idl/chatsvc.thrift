@@ -195,4 +195,8 @@ service TChatService extends core.TRService
     void replicate(
             1: core.RequestContext requestContext,
             2: ReplicationSnapshot replicationSnapshot),
+
+    bool expireZookeeperSession(
+            1: core.RequestContext requestContext,
+            2: i32 timeout),
 }

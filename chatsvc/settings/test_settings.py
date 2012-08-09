@@ -11,7 +11,7 @@ import hashlib
 import os
 import socket
 
-ENV = os.getenv("SERVICE_ENV", "default")
+ENV = "test"
 
 INSTANCE_OPTIONS = range(0, 5)
 INSTANCE = int(os.getenv("SERVICE_INSTANCE", 0))

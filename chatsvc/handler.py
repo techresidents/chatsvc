@@ -6,12 +6,13 @@ import gevent.queue
 from trpycore import riak_gevent
 from trpycore.greenlet.util import join
 from trpycore.riak_common.factory import RiakClientFactory
+from trpycore.zookeeper_gevent.util import expire_zookeeper_client_session
 from trsvcscore.mongrel2.decorator import session_required
 from trsvcscore.proxy.basic import BasicServiceProxy
 from trsvcscore.service_gevent.handler.service import GServiceHandler
 from trsvcscore.service_gevent.handler.mongrel2 import GMongrel2Handler
 from trsvcscore.session.riak import RiakSessionStorePool
-from trsvcscore.hashring.zookeeper import ZookeeperServiceHashring
+from trsvcscore.hashring.zoo import ZookeeperServiceHashring
 from trsvcscore.http.error import HttpError
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
@@ -293,7 +294,13 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         for message in chat_session_snapshot.messages:
             chat_session = self.chat_sessions_manager.get(chat_session_snapshot.token)
             chat_session.store_replicated_message(message)
-    
+
+    def expireZookeeperSession(self, requestContext, timeout):
+        result = False
+        if settings.ENV == "default" or \
+                settings.ENV == "test":
+            result = expire_zookeeper_client_session(self.zookeeper_client, timeout)
+        return result
 
 
 class ChatMongrel2Handler(GMongrel2Handler):
