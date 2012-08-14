@@ -6,6 +6,7 @@ import gevent.queue
 from trpycore import riak_gevent
 from trpycore.greenlet.util import join
 from trpycore.riak_common.factory import RiakClientFactory
+from trpycore.timezone import tz
 from trpycore.zookeeper_gevent.util import expire_zookeeper_client_session
 from trsvcscore.mongrel2.decorator import session_required
 from trsvcscore.proxy.basic import BasicServiceProxy
@@ -16,14 +17,16 @@ from trsvcscore.hashring.zoo import ZookeeperServiceHashring
 from trsvcscore.http.error import HttpError
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
-from trchatsvc.gen.ttypes import HashringNode, UnavailableException
+from trchatsvc.gen.ttypes import HashringNode, UnavailableException, InvalidMessageException
 
 
 import settings
 from session import ChatSessionsManager
 from message import MessageFactory, MessageEncoder
-from replication import GreenletPoolReplicator
-
+from message_handlers.base import MessageHandlerException
+from message_handlers.manager import MessageHandlerManager
+from replication import ReplicationException, GreenletPoolReplicator
+from persistence import GreenletPoolPersister
 
 class ChatServiceHandler(TChatService.Iface, GServiceHandler):
     """Chat service handler."""
@@ -38,9 +41,12 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         """
         super(ChatServiceHandler, self).__init__(
                 service,
-                zookeeper_hosts=settings.ZOOKEEPER_HOSTS)
+                zookeeper_hosts=settings.ZOOKEEPER_HOSTS,
+                database_connection=settings.DATABASE_CONNECTION)
+        
 
-        self.chat_sessions_manager =  ChatSessionsManager()
+        self.chat_sessions_manager =  ChatSessionsManager(self)
+        self.message_handler_manager = MessageHandlerManager(self)
         self.deferred_init = False
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         
@@ -50,7 +56,8 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         self.server_endpoint = None
         self.hashring = None
         self.replicator = None
-    
+        self.persister = None
+
     def _deferred_init(self):
         """Deferred initialization.
 
@@ -77,8 +84,14 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                     W=settings.REPLICATION_W,
                     max_connections_per_service=settings.REPLICATION_MAX_CONNECTIONS_PER_SERVICE,
                     allow_same_host_replications=settings.REPLICATION_ALLOW_SAME_HOST)
+            
+            self.persister = GreenletPoolPersister(
+                    service_handler=self,
+                    chat_sessions_manager=self.chat_sessions_manager,
+                    size=4)
 
             self.deferred_init = True
+
 
     def _is_remote_node(self, node):
         """Check if the given hashring node is remote.
@@ -143,6 +156,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         self._deferred_init()
 
         super(ChatServiceHandler, self).start()
+        self.persister.start()
         self.replicator.start()
         self.hashring.start()
     
@@ -155,6 +169,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         self.hashring.stop()
         self.hashring.join()
         self.replicator.stop()
+        self.persister.stop()
 
         super(ChatServiceHandler, self).stop()
 
@@ -173,7 +188,12 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                 If timeout is specified, the status() method must be called
                 to determine if the handler is still running.
         """
-        greenlets = [self.hashring, self.replicator, super(ChatServiceHandler, self)]
+        greenlets = [
+                self.hashring,
+                self.replicator,
+                self.persister,
+                super(ChatServiceHandler, self)
+                ]
         join(greenlets, timeout)
     
     def getHashring(self, requestContext):
@@ -230,18 +250,24 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                 new messages before timing out.
         Returns:
             list of Message objects.
+        Raises:
+            UnavailableException if no nodes are available.
         """
         primary_node = self._primary_node(chatSessionToken)
         if primary_node is None:
-            raise RuntimeError("oops")
+            raise UnavailableException("no nodes available")
 
         if self._is_remote_node(primary_node):
             proxy = self._service_proxy(primary_node)
             return proxy.getMessages(requestContext, chatSessionToken, asOf, block, timeout)
-        else:
+        
+        try:
             chat_session = self.chat_sessions_manager.get(chatSessionToken)
             messages = chat_session.get_messages(asOf, block, timeout)
             return messages
+        except Exception as error:
+            self.log.exception(error)
+            raise UnavailableException(str(error))
 
     def sendMessage(self, requestContext, message, N, W):
         """Send message to a chat.
@@ -268,20 +294,28 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         if self._is_remote_node(primary_node):
             proxy = self._service_proxy(primary_node)
             return proxy.sendMessage(requestContext, message, N, W)
-        else:
+
+        try:
             chat_session = self.chat_sessions_manager.get(message.header.chatSessionToken)
+            self.message_handler_manager.handle(requestContext, chat_session, message)
+            chat_session.send_message(message)
             async_result = self.replicator.replicate(chat_session, [message], N, W)
-            try:
-                async_result.get(block=True, timeout=settings.REPLICATION_TIMEOUT)
-                chat_session.send_message(message)
-                return message
-            except gevent.Timeout:
-                message = "timeout: (%ss)" % settings.REPLICATION_TIMEOUT
-                self.log.error(message)
-                raise UnavailableException(message)
-            except Exception as error:
-                self.log.exception(error)
-                raise UnavailableException(str(error))
+            async_result.get(block=True, timeout=settings.REPLICATION_TIMEOUT)
+            self.persister.persist(chat_session, [message])
+            return message
+        except MessageHandlerException as error:
+            self.log.exception(error)
+            raise InvalidMessageException(str(error))
+        except ReplicationException as error:
+            self.log.exception(error)
+            raise UnavailableException(str(error))
+        except gevent.Timeout:
+            message = "timeout: (%ss)" % settings.REPLICATION_TIMEOUT
+            self.log.error(message)
+            raise UnavailableException(message)
+        except Exception as error:
+            self.log.exception(error)
+            raise UnavailableException(str(error))
 
     def replicate(self, requestContext, replicationSnapshot):
         """Store a replication snapshot from another node.
@@ -291,8 +325,17 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             replicationSnapshot: ReplicationSnapshot object
         """
         chat_session_snapshot = replicationSnapshot.chatSessionSnapshot
+        chat_session = self.chat_sessions_manager.get(chat_session_snapshot.token)
+
+        if chat_session_snapshot.startTimestamp > 0:
+            chat_session.start = tz.timestamp_to_utc(chat_session_snapshot.startTimestamp)
+
+        if chat_session_snapshot.endTimestamp > 0:
+            chat_session.end = tz.timestamp_to_utc(chat_session_snapshot.endTimestamp)
+
+        chat_session.persisted = chat_session_snapshot.persisted
+
         for message in chat_session_snapshot.messages:
-            chat_session = self.chat_sessions_manager.get(chat_session_snapshot.token)
             chat_session.store_replicated_message(message)
 
     def expireZookeeperSession(self, requestContext, timeout):
@@ -388,10 +431,10 @@ class ChatMongrel2Handler(GMongrel2Handler):
             return response
         except UnavailableException as error:
             self.log.error("get failed: %s" % error.fault)
-            raise HttpError(503, "internal error")
+            raise HttpError(503, "service unavailable")
         except Exception as error:
             self.log.exception(error)
-            raise HttpError(503, "internal error")
+            raise HttpError(500, "internal error")
 
 
     @session_required
@@ -423,9 +466,12 @@ class ChatMongrel2Handler(GMongrel2Handler):
                     settings.REPLICATION_W)
             result = self.JsonResponse(data=json.dumps(response, cls=MessageEncoder))
             return result
+        except InvalidMessageException as error:
+            self.log.error("post failed: %s" % error.fault)
+            raise HttpError(400, "invalid message")
         except UnavailableException as error:
             self.log.error("post failed: %s" % error.fault)
-            raise HttpError(503, "internal error")
+            raise HttpError(503, "service unavailable")
         except Exception as error:
             self.log.exception(error)
-            raise HttpError(503, "internal error")
+            raise HttpError(500, "internal error")

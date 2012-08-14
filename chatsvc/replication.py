@@ -7,6 +7,7 @@ import gevent.coros
 import gevent.event
 import gevent.queue
 
+from trpycore.timezone import tz
 from trsvcscore.proxy.basic import BasicServiceProxyPool
 from trsvcscore.hashring.base import ServiceHashringEvent
 from tridlcore.gen.ttypes import RequestContext
@@ -30,6 +31,9 @@ def nodes_to_string(nodes):
     return "\n".join(["%s" % node_to_string(n) for n in nodes])
 
 
+class ReplicationException(Exception):
+    """Replication exception class."""
+    pass
 
 class ReplicationAsyncResult(gevent.event.AsyncResult):
     """Async replication result.
@@ -275,7 +279,7 @@ class Replicator(object):
                 context="")
 
     def _build_replication_snapshot(self, chat_session, messages):
-        """Build ReplicationSnapshot obeject.
+        """Build ReplicationSnapshot object.
 
         Args:
             chat_session: ChatSession object
@@ -288,11 +292,20 @@ class Replicator(object):
         """
         #TODO - make this more robust
         full_snapshot = len(chat_session.messages) == len(messages)
+        
+        start_timestamp = 0
+        if chat_session.start:
+            start_timestamp = tz.utc_to_timestamp(chat_session.start)
+
+        end_timestamp = 0
+        if chat_session.end:
+            end_timestamp = tz.utc_to_timestamp(chat_session.end)
+
 
         chat_session_snapshot = ChatSessionSnapshot(
                 token=chat_session.token,
-                startTimestamp=chat_session.start_timestamp,
-                endTimestamp=chat_session.end_timestamp,
+                startTimestamp=start_timestamp,
+                endTimestamp=end_timestamp,
                 messages=messages,
                 completed=chat_session.completed,
                 persisted=chat_session.persisted)
@@ -560,7 +573,7 @@ class Replicator(object):
                     self.log.debug("Done replicating %s message(s) to %s" % (len(messages), node_to_string(node)))
         except Exception as error:
             self.log.exception(error)
-            result.set_exception(error)
+            result.set_exception(ReplicationException(str(error)))
 
 
     def _hashring_observer(self, hashring, event):

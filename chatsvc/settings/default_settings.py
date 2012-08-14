@@ -15,6 +15,13 @@ THRIFT_SERVER_ADDRESS = socket.gethostname()
 THRIFT_SERVER_INTERFACE = "0.0.0.0"
 THRIFT_SERVER_PORT = 9090
 
+#Database settings
+DATABASE_HOST = "localdev"
+DATABASE_NAME = "localdev_techresidents"
+DATABASE_USERNAME = "techresidents"
+DATABASE_PASSWORD = "techresidents"
+DATABASE_CONNECTION = "postgresql+psycopg2://%s:%s@/%s?host=%s" % (DATABASE_USERNAME, DATABASE_PASSWORD, DATABASE_NAME, DATABASE_HOST)
+
 #Zookeeper settings
 ZOOKEEPER_HOSTS = ["localdev:2181"]
 

@@ -9,6 +9,10 @@ exception UnavailableException {
     1: string fault,
 }
 
+exception InvalidMessageException {
+    1: string fault,
+}
+
 
 /* Message types */
 
@@ -43,6 +47,8 @@ enum MarkerType {
     CONNECTED_MARKER,
     PUBLISHING_MARKER,
     SPEAKING_MARKER,
+    STARTED_MARKER,
+    ENDED_MARKER,
 }
 
 struct JoinedMarker {
@@ -65,12 +71,22 @@ struct SpeakingMarker {
     2: bool isSpeaking,
 }
 
+struct StartedMarker {
+    1: i32 userId,
+}
+
+struct EndedMarker {
+    1: i32 userId,
+}
+
 struct Marker {
     1: MarkerType type,
     2: optional JoinedMarker joinedMarker,
     3: optional ConnectedMarker connectedMarker,
     4: optional PublishingMarker publishingMarker,
     5: optional SpeakingMarker speakingMarker,
+    6: optional StartedMarker startedMarker,
+    7: optional EndedMarker endedMarker,
 }
 
 
@@ -159,8 +175,7 @@ struct ChatSessionSnapshot {
     2: double startTimestamp,
     3: double endTimestamp,
     4: list<Message> messages,
-    5: bool completed,
-    6: bool persisted,
+    5: bool persisted,
 }
 
 struct ReplicationSnapshot {
@@ -190,7 +205,9 @@ service TChatService extends core.TRService
             1: core.RequestContext requestContext,
             2: Message message,
             3: i32 N,
-            4: i32 W) throws (1:UnavailableException e), 
+            4: i32 W) throws (
+                1:UnavailableException unavailableException,
+                2:InvalidMessageException invalidMessageException), 
 
     void replicate(
             1: core.RequestContext requestContext,

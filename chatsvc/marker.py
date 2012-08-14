@@ -38,12 +38,30 @@ def create_speaking_marker(marker):
                 )
             )
 
+def create_started_marker(marker):
+    return ttypes.Marker(
+            type=ttypes.MarkerType.STARTED_MARKER,
+            startedMarker=ttypes.StartedMarker(
+                userId=marker.get("userId"),
+                )
+            )
+
+def create_ended_marker(marker):
+    return ttypes.Marker(
+            type=ttypes.MarkerType.ENDED_MARKER,
+            endedMarker=ttypes.EndedMarker(
+                userId=marker.get("userId"),
+                )
+            )
+
 
 MARKER_TYPE_MAP = {
     ttypes.MarkerType.JOINED_MARKER: create_joined_marker,
     ttypes.MarkerType.CONNECTED_MARKER: create_connected_marker,
     ttypes.MarkerType.PUBLISHING_MARKER: create_publishing_marker,
     ttypes.MarkerType.SPEAKING_MARKER: create_speaking_marker,
+    ttypes.MarkerType.STARTED_MARKER: create_started_marker,
+    ttypes.MarkerType.ENDED_MARKER: create_ended_marker,
 }
 
 class MarkerFactory(object):
@@ -62,6 +80,8 @@ class MarkerEncoder(json.JSONEncoder):
             ttypes.MarkerType.CONNECTED_MARKER: self.encode_connected_marker,
             ttypes.MarkerType.PUBLISHING_MARKER: self.encode_publishing_marker,
             ttypes.MarkerType.SPEAKING_MARKER: self.encode_speaking_marker,
+            ttypes.MarkerType.STARTED_MARKER: self.encode_started_marker,
+            ttypes.MarkerType.ENDED_MARKER: self.encode_ended_marker,
         }
 
     def default(self, obj):
@@ -107,4 +127,20 @@ class MarkerEncoder(json.JSONEncoder):
             "type": type,
             "userId": marker.userId,
             "isSpeaking": marker.isSpeaking,
+        }
+
+    def encode_started_marker(self, marker):
+        type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
+        marker = marker.startedMarker
+        return {
+            "type": type,
+            "userId": marker.userId,
+        }
+
+    def encode_ended_marker(self, marker):
+        type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
+        marker = marker.endedMarker
+        return {
+            "type": type,
+            "userId": marker.userId,
         }

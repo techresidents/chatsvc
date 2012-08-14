@@ -70,7 +70,7 @@ def main(argv):
 
             service.start()
             service.join()
-    
+        
     except PidFileException as error:
         logging.error("Service is already running: %s" % str(error))
 
