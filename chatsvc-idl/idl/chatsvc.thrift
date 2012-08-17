@@ -28,6 +28,18 @@ enum MessageType {
     MARKER_CREATE = 400,
 }
 
+enum MessageRouteType {
+    NO_ROUTE,
+    BROADCAST_ROUTE,
+    TARGETED_ROUTE,
+}
+
+/* MessageRoute */
+
+struct MessageRoute {
+    1: MessageRouteType type,
+    2: optional list<i32> recipients,
+}
 
 /* Message header */
 
@@ -37,6 +49,7 @@ struct MessageHeader {
     3: string chatSessionToken,
     4: i32 userId,
     5: double timestamp,
+    6: MessageRoute route,
 }
 
 

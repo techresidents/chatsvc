@@ -307,7 +307,6 @@ class Replicator(object):
                 startTimestamp=start_timestamp,
                 endTimestamp=end_timestamp,
                 messages=messages,
-                completed=chat_session.completed,
                 persisted=chat_session.persisted)
 
         replication_snapshot = ReplicationSnapshot(

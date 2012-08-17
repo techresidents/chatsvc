@@ -1,3 +1,9 @@
+"""Chat Marker Messages factory and JSON encoding.
+
+This module may need to be moved to trchatsvc, as part of the IDL, to
+allow other services to convert a Messages to JSON.
+
+"""
 import json
 
 import trchatsvc.gen.ttypes as ttypes

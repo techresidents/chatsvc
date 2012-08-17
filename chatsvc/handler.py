@@ -26,7 +26,8 @@ from message import MessageFactory, MessageEncoder
 from message_handlers.base import MessageHandlerException
 from message_handlers.manager import MessageHandlerManager
 from replication import ReplicationException, GreenletPoolReplicator
-from persistence import GreenletPoolPersister
+from persistence import GreenletPoolPersister, PersistEvent
+from garbage import GarbageCollector, GarbageCollectionEvent
 
 class ChatServiceHandler(TChatService.Iface, GServiceHandler):
     """Chat service handler."""
@@ -57,7 +58,8 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         self.hashring = None
         self.replicator = None
         self.persister = None
-
+        self.garbage_collector = None
+        
     def _deferred_init(self):
         """Deferred initialization.
 
@@ -86,9 +88,20 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                     allow_same_host_replications=settings.REPLICATION_ALLOW_SAME_HOST)
             
             self.persister = GreenletPoolPersister(
-                    service_handler=self,
+                    service=self.service,
+                    hashring=self.hashring,
                     chat_sessions_manager=self.chat_sessions_manager,
+                    database_session_factory=self.get_database_session,
                     size=4)
+            self.persister.add_observer(self._persist_observer)
+
+            self.garbage_collector = GarbageCollector(
+                    service=self.service,
+                    hashring=self.hashring,
+                    chat_sessions_manager=self.chat_sessions_manager,
+                    interval=60,
+                    throttle=0.1)
+            self.garbage_collector.add_observer(self._gc_observer)
 
             self.deferred_init = True
 
@@ -150,6 +163,31 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             result.append(hashring_node)
         return result
 
+    
+    def _persist_observer(self, event):
+        """Perister observer method.
+
+        Args:
+            event: PersistEvent object
+        """
+        #When a chat session is successfuly persisted, perform
+        #one final replication so that other nodes become aware
+        #that the session has been persisted.
+        if event.event_type == PersistEvent.SESSION_PERSISTED_EVENT:
+            self.log.info("chat session (id=%s) successfully persisted" \
+                    % event.chat_session.id)
+            self.replicator.replicate(event.chat_session, [])
+
+    def _gc_observer(self, event):
+        """GarbageCollector observer method.
+
+        Args:
+            event: GarbageCollectionEvent object
+        """
+        if event.event_type == GarbageCollectionEvent.ZOMBIE_SESSION_EVENT:
+            primary_node = self._primary_node(event.chat_session.token)
+            if not self._is_remote_node(primary_node):
+                self.persister.persist(event.chat_session, [], zombie=True)
 
     def start(self):
         """Start handler."""
@@ -159,6 +197,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         self.persister.start()
         self.replicator.start()
         self.hashring.start()
+        self.garbage_collector.start()
     
     def stop(self):
         """Stop handler."""
@@ -166,6 +205,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         #Wait for the hashring to be stopped before stopping our parent,
         #since this will stop the zookeeper client which is required
         #to stop the hashring.
+        self.garbage_collector.stop()
         self.hashring.stop()
         self.hashring.join()
         self.replicator.stop()
@@ -189,6 +229,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                 to determine if the handler is still running.
         """
         greenlets = [
+                self.garbage_collector,
                 self.hashring,
                 self.replicator,
                 self.persister,
@@ -263,7 +304,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         
         try:
             chat_session = self.chat_sessions_manager.get(chatSessionToken)
-            messages = chat_session.get_messages(asOf, block, timeout)
+            messages = chat_session.get_messages(asOf, block, timeout, requestContext.userId)
             return messages
         except Exception as error:
             self.log.exception(error)
@@ -280,7 +321,6 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             W: number of nodes that message needs to be
                 written to before the write can be considered
                 successful.
-        
         Returns:
             Updated message.
         Raises:
@@ -297,12 +337,29 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
 
         try:
             chat_session = self.chat_sessions_manager.get(message.header.chatSessionToken)
-            self.message_handler_manager.handle(requestContext, chat_session, message)
-            chat_session.send_message(message)
-            async_result = self.replicator.replicate(chat_session, [message], N, W)
+            additional_messages = self.message_handler_manager.handle(
+                    requestContext,
+                    chat_session,
+                    message)
+
+            #create message list, including additional messages
+            #returned by handler.
+            messages = [message]
+            messages.extend(additional_messages)
+
+            #send messages to waiting users.
+            chat_session.send_messages(messages)
+            
+            #replicate messages
+            async_result = self.replicator.replicate(chat_session, messages, N, W)
             async_result.get(block=True, timeout=settings.REPLICATION_TIMEOUT)
-            self.persister.persist(chat_session, [message])
+
+            #persist messages
+            self.persister.persist(chat_session, messages)
+
+            #return updated message
             return message
+
         except MessageHandlerException as error:
             self.log.exception(error)
             raise InvalidMessageException(str(error))
@@ -326,17 +383,20 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         """
         chat_session_snapshot = replicationSnapshot.chatSessionSnapshot
         chat_session = self.chat_sessions_manager.get(chat_session_snapshot.token)
-
+        
+        #update start timestamp
         if chat_session_snapshot.startTimestamp > 0:
             chat_session.start = tz.timestamp_to_utc(chat_session_snapshot.startTimestamp)
-
+        
+        #update end timestamp
         if chat_session_snapshot.endTimestamp > 0:
             chat_session.end = tz.timestamp_to_utc(chat_session_snapshot.endTimestamp)
-
+        
+        #update persisted flag
         chat_session.persisted = chat_session_snapshot.persisted
-
-        for message in chat_session_snapshot.messages:
-            chat_session.store_replicated_message(message)
+        
+        #store replicated messages.
+        chat_session.store_replicated_messages(chat_session_snapshot.messages)
 
     def expireZookeeperSession(self, requestContext, timeout):
         result = False
