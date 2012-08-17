@@ -166,7 +166,3 @@ def build_tag_create_message(chat_session_token, name):
 
     factory = MessageFactory()
     return factory.create(header, msg)
-
-
-if __name__ == '__main__':
-    unittest.main()
