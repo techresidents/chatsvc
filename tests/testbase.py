@@ -62,7 +62,7 @@ class IntegrationTestCase(unittest.TestCase):
         cls.service.start()
         gevent.sleep(1)
 
-        cls.service_name = "chatsvc"
+        cls.service_name = SERVICE_NAME
         cls.service_class = TChatService
 
         cls.zookeeper_client = GZookeeperClient(["localdev:2181"])
@@ -95,7 +95,7 @@ class DistributedTestCase(unittest.TestCase):
         cls.service2.start()
         gevent.sleep(1)
 
-        cls.service_name = "chatsvc"
+        cls.service_name = SERVICE_NAME
         cls.service_class = TChatService
 
         cls.zookeeper_client = GZookeeperClient(["localdev:2181"])
