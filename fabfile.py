@@ -280,6 +280,7 @@ def release(new_version, new_snapshot_version):
     local("git branch {release_branch}".format(**info))
     local("git push origin {release_branch}".format(**info))
     local("git branch --set-upstream {release_branch} origin/{release_branch}".format(**info))
+    local("git pull")
     local("git checkout {release_branch}".format(**info))
 
     #bump release branch versions
