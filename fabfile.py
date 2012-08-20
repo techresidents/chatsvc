@@ -106,12 +106,9 @@ def _create_app_tarball(tag="HEAD", release="1", arch="x86_64"):
 def _file_replace(fileglob, pattern, replacement, count=0, flags=re.DOTALL, expected_substitutions=1):
     """Helper to replace a pattern in a file."""
     for filename in glob.glob(fileglob):
-        print filename
         with open(filename, 'r') as f:
             data = f.read()
         
-        print pattern
-        print replacement
         result, substitutions = re.subn(pattern, replacement, data, count, flags)
         if substitutions != expected_substitutions:
             raise RuntimeError("number of substitutions (%d) != expected substitutions (%d)"\
@@ -256,8 +253,9 @@ def bump_version(current_version, new_version):
 
 def release(new_version, new_snapshot_version):
     """Cut release"""
-    
+
     new_major_version = new_version.rsplit('.', 1)[0]
+
     info = {
         "service": env.project,
         "current_version": "%s-SNAPSHOT" % new_major_version,
@@ -266,7 +264,7 @@ def release(new_version, new_snapshot_version):
         "new_snapshot_version": new_snapshot_version,
         "release_branch": "release-%s" % new_major_version
     }
-    
+
     answer = prompt("Releasing with the following parameters\n\n%s\n\nContinue with release?" % info, default="n")
     if answer not in ["Y", "y", "Yes", "YES"]:
         return
@@ -288,7 +286,7 @@ def release(new_version, new_snapshot_version):
     bump_version(info["current_version"], info["new_version"])
 
     #deploy idl to nexus
-    with cd("{service}-idl".format(**info)):
+    with lcd("{service}-idl".format(**info)):
         local("mvn clean deploy")
 
     #commit changes to release branch and push 
@@ -322,7 +320,7 @@ def release(new_version, new_snapshot_version):
     bump_version(info["new_version"], info["new_snapshot_version"])
 
     #deploy idl to nexus
-    with cd("{service}-idl".format(**info)):
+    with lcd("{service}-idl".format(**info)):
         local("mvn clean deploy")
 
     local("git commit -a -m 'Bumping version to {new_major_version}.1-SNAPSHOT'".format(**info))
