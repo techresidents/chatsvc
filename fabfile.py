@@ -134,7 +134,7 @@ def build_rpm(tag="HEAD", release="1", arch="x86_64"):
     """
 
     if len(env.hosts) != 1:
-        raise RuntimeError("build_rpm must be run exactly 1 remote machine")
+        raise RuntimeError("build_rpm must be run on exactly 1 remote machine")
 
     tarball = _create_app_tarball(tag, release, arch)
 
@@ -253,6 +253,9 @@ def bump_version(current_version, new_version):
 
 def release(new_version, new_snapshot_version, current_version=None):
     """Cut release"""
+
+    if len(env.hosts) != 1:
+        raise RuntimeError("release must be run on exactly 1 remote machine")
 
     new_major_version = new_version.rsplit('.', 1)[0]
 
