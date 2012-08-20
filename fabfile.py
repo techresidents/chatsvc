@@ -290,8 +290,8 @@ def release(new_version, new_snapshot_version):
         local("mvn clean deploy")
 
     #commit changes to release branch and push 
-    run("git commit -a -m 'Bumping version to {new_version}'".format(**info))
-    run("git push")
+    local("git commit -a -m 'Bumping version to {new_version}'".format(**info))
+    local("git push")
 
     #build rpm
     build_rpm()
