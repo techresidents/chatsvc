@@ -299,7 +299,7 @@ def release(new_version, new_snapshot_version):
     #Checkout master and merge release
     local("git checkout master")
     local("git merge --no-ff {release_branch}".format(**info))
-    local("git tag -a -m 'Release {new_version}'".format(**info))
+    local("git tag -a {new_version} -m 'Release {new_version}'".format(**info))
     local("git push --all")
     local("git push --tags")
 
