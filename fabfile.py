@@ -251,14 +251,14 @@ def bump_version(current_version, new_version):
             pattern=r"{service}-idl-python/{current_version}/{service}-idl-python-{current_version}-bin.tar.gz".format(**info),
             replacement=r"{service}-idl-python/{new_version}/{service}-idl-python-{new_version}-bin.tar.gz".format(**info))
 
-def release(new_version, new_snapshot_version):
+def release(new_version, new_snapshot_version, current_version=None):
     """Cut release"""
 
     new_major_version = new_version.rsplit('.', 1)[0]
 
     info = {
         "service": env.project,
-        "current_version": "%s-SNAPSHOT" % new_major_version,
+        "current_version": current_version or "%s-SNAPSHOT" % new_major_version,
         "new_version": new_version,
         "new_major_version": new_major_version,
         "new_snapshot_version": new_snapshot_version,
@@ -299,7 +299,7 @@ def release(new_version, new_snapshot_version):
     #Checkout master and merge release
     local("git checkout master")
     local("git merge --no-ff {release_branch}".format(**info))
-    local("git tag -a -m 'Release {new_version}'".format(**info))
+    local("git tag -a {new_version} -m 'Release {new_version}'".format(**info))
     local("git push --all")
     local("git push --tags")
 
