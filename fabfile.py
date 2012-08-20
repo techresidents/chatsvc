@@ -301,14 +301,18 @@ def release(new_version, new_snapshot_version, current_version=None):
     
     #Checkout master and merge release
     local("git checkout master")
+    local("git branch --no-merged")
     local("git merge --no-ff {release_branch}".format(**info))
     local("git tag -a {new_version} -m 'Release {new_version}'".format(**info))
     local("git push --all")
     local("git push --tags")
+    local("git branch --no-merged")
 
     #Checkout integration branch and merge release
     local("git checkout integration")
+    local("git branch --no-merged")
     local("git merge --no-ff {release_branch}".format(**info))
+    local("git branch --no-merged")
 
     #bump release branch versions
     bump_version(info["new_version"], info["new_snapshot_version"])
