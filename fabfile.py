@@ -254,15 +254,17 @@ def bump_version(current_version, new_version):
             pattern=r"{service}-idl-python/{current_version}/{service}-idl-python-{current_version}-bin.tar.gz".format(**info),
             replacement=r"{service}-idl-python/{new_version}/{service}-idl-python-{new_version}-bin.tar.gz".format(**info))
 
-def release(current_version, new_version, new_snapshot_version):
+def release(new_version, new_snapshot_version):
     """Cut release"""
-
+    
+    new_major_version = new_version.rsplit('.', 1)[0]
     info = {
         "service": env.project,
-        "current_version": current_version,
+        "current_version": "%s-SNAPSHOT" % new_major_version,
         "new_version": new_version,
-        "new_major_version": new_version.rsplit('.', 1)[0],
-        "new_snapshot_version": new_snapshot_version
+        "new_major_version": new_major_version,
+        "new_snapshot_version": new_snapshot_version,
+        "release_branch": "release-%s" % new_major_version
     }
     
     answer = prompt("Releasing with the following parameters\n\n%s\n\nContinue with release?" % info, default="n")
@@ -277,20 +279,20 @@ def release(current_version, new_version, new_snapshot_version):
 
     #create and checkout release branch
     local("git checkout integration")
-    local("git branch release-{new_major_version}".format(**info))
-    local("git push origin release-{new_major_version}".format(**info))
-    local("git branch --set-upstream release-{new_major_version} origin/release-{new_major_version}".format(**info))
-    local("git checkout release-{new_major_version}".format(**info))
+    local("git branch {release_branch}".format(**info))
+    local("git push origin {release_branch}".format(**info))
+    local("git branch --set-upstream {release_branch} origin/{release_branch}".format(**info))
+    local("git checkout {release_branch}".format(**info))
 
     #bump release branch versions
     bump_version(info["current_version"], info["new_version"])
 
     #deploy idl to nexus
     with cd("{service}-idl".format(**info)):
-        run("mvn clean deploy")
+        local("mvn clean deploy")
 
     #commit changes to release branch and push 
-    run("git commit -a -m Bumping version to {new_version}".format(**info))
+    run("git commit -a -m 'Bumping version to {new_version}'".format(**info))
     run("git push")
 
     #build rpm
@@ -298,30 +300,30 @@ def release(current_version, new_version, new_snapshot_version):
     
     #Checkout master and merge release
     local("git checkout master")
-    local("git merge --no-ff release-{new_major_version}".format(**info))
-    local("git tag -a -m Release {new_version}".format(**info))
+    local("git merge --no-ff {release_branch}".format(**info))
+    local("git tag -a -m 'Release {new_version}'".format(**info))
     local("git push --all")
     local("git push --tags")
 
     #Checkout release branch and bump version for next minor release
-    local("git checkout release-{new_major_version}".format(**info))
+    local("git checkout {release_branch}".format(**info))
     _file_replace(
             fileglob="version.py",
             pattern=r"{new_version}".format(**info),
             replacement=r"{new_major_version}.1-SNAPSHOT".format(**info))
-    local("git commit -a -m Bumping version to {new_major_version}.1-SNAPSHOT".format(**info))
+    local("git commit -a -m 'Bumping version to {new_major_version}.1-SNAPSHOT'".format(**info))
     local("git push")
     
     #Checkout integration branch and merge release
     local("git checkout integration")
-    local("git merge --no-ff release-{new_major_version}".format(**info))
+    local("git merge --no-ff {release_branch}".format(**info))
 
     #bump release branch versions
     bump_version(info["new_version"], info["new_snapshot_version"])
 
     #deploy idl to nexus
     with cd("{service}-idl".format(**info)):
-        run("mvn clean deploy")
+        local("mvn clean deploy")
 
-    local("git commit -a -m Bumping version to {new_major_version}.1-SNAPSHOT".format(**info))
+    local("git commit -a -m 'Bumping version to {new_major_version}.1-SNAPSHOT'".format(**info))
     local("git push")
