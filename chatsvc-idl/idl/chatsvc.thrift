@@ -3,6 +3,17 @@ namespace py trchatsvc.gen
 
 include "core.thrift"
 
+/* Exceptions */
+
+exception UnavailableException {
+    1: string fault,
+}
+
+exception InvalidMessageException {
+    1: string fault,
+}
+
+
 /* Message types */
 
 enum MessageType {
@@ -17,6 +28,18 @@ enum MessageType {
     MARKER_CREATE = 400,
 }
 
+enum MessageRouteType {
+    NO_ROUTE,
+    BROADCAST_ROUTE,
+    TARGETED_ROUTE,
+}
+
+/* MessageRoute */
+
+struct MessageRoute {
+    1: MessageRouteType type,
+    2: optional list<i32> recipients,
+}
 
 /* Message header */
 
@@ -25,7 +48,8 @@ struct MessageHeader {
     2: MessageType type,
     3: string chatSessionToken,
     4: i32 userId,
-    5: i64 timestamp,
+    5: double timestamp,
+    6: MessageRoute route,
 }
 
 
@@ -36,26 +60,36 @@ enum MarkerType {
     CONNECTED_MARKER,
     PUBLISHING_MARKER,
     SPEAKING_MARKER,
+    STARTED_MARKER,
+    ENDED_MARKER,
 }
 
 struct JoinedMarker {
-    1: string userId,
+    1: i32 userId,
     2: string name,
 }
 
 struct ConnectedMarker {
-    1: string userId,
+    1: i32 userId,
     2: bool isConnected,
 }
 
 struct PublishingMarker {
-    1: string userId,
+    1: i32 userId,
     2: bool isPublishing,
 }
 
 struct SpeakingMarker {
-    1: string userId,
+    1: i32 userId,
     2: bool isSpeaking,
+}
+
+struct StartedMarker {
+    1: i32 userId,
+}
+
+struct EndedMarker {
+    1: i32 userId,
 }
 
 struct Marker {
@@ -64,6 +98,8 @@ struct Marker {
     3: optional ConnectedMarker connectedMarker,
     4: optional PublishingMarker publishingMarker,
     5: optional SpeakingMarker speakingMarker,
+    6: optional StartedMarker startedMarker,
+    7: optional EndedMarker endedMarker,
 }
 
 
@@ -76,14 +112,14 @@ struct MarkerCreateMessage {
 
 struct MinuteCreateMessage {
     1: optional string minuteId, 
-    2: string topicId,   
+    2: i32 topicId,   
     3: optional i64 startTimestamp,
     4: optional i64 endTimestamp,
 }
 
 struct MinuteUpdateMessage {
     1: string minuteId, 
-    2: string topicId,   
+    2: i32 topicId,   
     3: i64 startTimestamp,
     4: optional i64 endTimestamp,
 }
@@ -133,16 +169,64 @@ struct Message {
 }
 
 
+/* Hashring */
+
+struct HashringNode {
+    1: string token,
+    2: string serviceName,
+    3: string serviceAddress,
+    4: i32 servicePort,
+    5: string hostname,
+    6: string fqdn,
+}
+
+/* Replication */
+
+/* Chat Session Snapshot */
+struct ChatSessionSnapshot {
+    1: string token,
+    2: double startTimestamp,
+    3: double endTimestamp,
+    4: list<Message> messages,
+    5: bool persisted,
+}
+
+struct ReplicationSnapshot {
+    1: bool fullSnapshot,
+    2: ChatSessionSnapshot chatSessionSnapshot,
+}
+
+
 /* Service interface */
 
 service TChatService extends core.TRService
 {
+    list<HashringNode> getHashring(1: core.RequestContext requestContext),
+    
+    list<HashringNode> getPreferenceList(
+            1: core.RequestContext requestContext,
+            2: string chatSessionToken),
+
     list<Message> getMessages(
             1: core.RequestContext requestContext,
             2: string chatSessionToken,
-            3: i64 asOf,
+            3: double asOf,
             4: bool block,
-            5: i32 timeout),
+            5: i32 timeout) throws (1:UnavailableException e),
 
-    Message sendMessage(1: core.RequestContext requestContext, 2: Message message),
+    Message sendMessage(
+            1: core.RequestContext requestContext,
+            2: Message message,
+            3: i32 N,
+            4: i32 W) throws (
+                1:UnavailableException unavailableException,
+                2:InvalidMessageException invalidMessageException), 
+
+    void replicate(
+            1: core.RequestContext requestContext,
+            2: ReplicationSnapshot replicationSnapshot),
+
+    bool expireZookeeperSession(
+            1: core.RequestContext requestContext,
+            2: i32 timeout),
 }

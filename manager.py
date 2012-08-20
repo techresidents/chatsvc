@@ -19,19 +19,57 @@ SERVICE =  os.path.basename(PROJECT_DIRECTORY)
 SERVICE_DIRECTORY = os.path.join(PROJECT_DIRECTORY, SERVICE)
 SERVICE_PATH = os.path.join(SERVICE_DIRECTORY, "%s.py" % SERVICE)
 
-#Add service directory path so we can import settings when needed
+#Add service directory path so we can import settings
+#Note that this module may need to reloaded follwing
+#the setting of the SERVICE_ENV and SERVICE_INSTANCE
+#environment variables to ensure proper settings
+#values.
 sys.path.insert(0, SERVICE_DIRECTORY)
+import settings
 
 class ManagerException(Exception):
     pass
 
 #Operations
 
-def start(env=None, user=None, group=None):
+def start(env=None, instance=None, user=None, group=None):
+    #Modify process environment and import settings.
+    #It's neccessary to modify environment prior to 
+    #import so that the appropriate environment
+    #settings are loaded.
+    if env:
+        os.environ["SERVICE_ENV"] = env
+
+    if instance:
+        os.putenv("SERVICE_INSTANCE", instance)
+
+    #reload settings with adjusted environment variables
+    reload(settings)
+
+    if instance:
+        start_instance(env, instance, user, group)
+    else:
+        instance_options = getattr(settings, "INSTANCE_OPTIONS", [None])
+        exceptions = []
+        for instance_option in instance_options:
+            try:
+                start_instance(env, str(instance_option), user, group)
+            except Exception as error:
+                logging.exception(error)
+                exceptions.append(error)
+        
+        if exceptions:
+            raise ManagerException("Failed to start service")
+
+
+def start_instance(env=None, instance=None, user=None, group=None):
     #Set environment variable for forked daemon
     #This will not change os.environ for current process.
     if env:
-        os.putenv("SERVICE_ENV", env)
+        os.environ["SERVICE_ENV"] = env
+
+    if instance:
+        os.environ["SERVICE_INSTANCE"] = instance
     
     #If env directory exists, use that python.
     #Otherwise backoff to /usr/bin/env python.
@@ -54,17 +92,53 @@ def start(env=None, user=None, group=None):
     if not pid_exists(pid):
         raise ManagerException("Failed to start service")
 
-def stop(env=None, block=False, timeout=None):
+
+def stop(env=None, instance=None, block=False, timeout=None):
     #Modify process environment and import settings.
     #It's neccessary to modify environment prior to 
     #import so that the appropriate environment
     #settings are loaded.
     if env:
         os.environ["SERVICE_ENV"] = env
-    import settings
+
+    if instance:
+        os.environ["SERVICE_INSTANCE"] = instance
+    
+    #reload settings with adjusted environment variables
+    reload(settings)
+
+    if instance:
+        stop_instance(env, instance, block, timeout)
+    else:
+        instance_options = getattr(settings, "INSTANCE_OPTIONS", [None])
+        exceptions = []
+        for instance_option in instance_options:
+            try:
+                stop_instance(env, str(instance_option), block, timeout)
+            except Exception as error:
+                logging.exception(error)
+                exceptions.append(error)
+        
+        if exceptions:
+            raise ManagerException("Failed to stop service")
+
+def stop_instance(env=None, instance=None, block=False, timeout=None):
+    #Modify process environment and import settings.
+    #It's neccessary to modify environment prior to 
+    #import so that the appropriate environment
+    #settings are loaded.
+    if env:
+        os.environ["SERVICE_ENV"] = env
+
+    if instance:
+        os.environ["SERVICE_INSTANCE"] = instance
+    
+    #reload settings with adjusted environment variables
+    reload(settings)
     
     #Nothing to do if pid file does not exist
     if not os.path.exists(settings.SERVICE_PID_FILE):
+        logging.warning("pid file '%s' does not exist." % settings.SERVICE_PID_FILE)
         return
     
     #Open pidfile and send pid SIGTERM for graceful exit.
@@ -85,15 +159,15 @@ def stop(env=None, block=False, timeout=None):
                 time.sleep(1)
         
 
-def restart(env=None, block=False, timeout=None, user=None, group=None):
-    stop(env, block, timeout)
-    start(env, user, group)
+def restart(env=None, instance=None, block=False, timeout=None, user=None, group=None):
+    stop(env, instance, block, timeout)
+    start(env, instance, user, group)
 
 
 #Command handlers
 def startCommandHandler(args):
     """Start service as daemon process"""
-    start(args.env, args.user, args.group)
+    start(args.env, args.instance, args.user, args.group)
 
 startCommandHandler.examples = """Examples:
     manager.py start             #Start service
@@ -103,7 +177,7 @@ startCommandHandler.examples = """Examples:
 
 def stopCommandHandler(args):
     """Stop service"""
-    stop(args.env, args.wait, args.timeout)
+    stop(args.env, args.instance, args.wait, args.timeout)
 
 stopCommandHandler.examples = """Examples:
     manager.py stop                      #Stop service
@@ -114,7 +188,7 @@ stopCommandHandler.examples = """Examples:
 
 def restartCommandHandler(args):
     """Restart service"""
-    restart(args.env, True, args.timeout, args.user, args.group)
+    restart(args.env, args.instance, True, args.timeout, args.user, args.group)
 
 restartCommandHandler.examples = """Examples:
     manager.py restart               #Restart service
@@ -142,6 +216,7 @@ def main(argv):
         startCommandParser.set_defaults(command="start", commandHandler=startCommandHandler)
         startCommandParser.add_argument("-u", "--user", help="Drop privileges to user (also requires --group)")
         startCommandParser.add_argument("-g", "--group", help="Drop privileges to group (also requires --user)")
+        startCommandParser.add_argument("-i", "--instance", help="Specific service instance to start (if not provided all instances will be started")
 
         #stop parser
         stopCommandParser = commandParsers.add_parser(
@@ -154,6 +229,7 @@ def main(argv):
         stopCommandParser.set_defaults(command="stop", commandHandler=stopCommandHandler)
         stopCommandParser.add_argument("-w", "--wait", action="store_true", help="Wait for service to stop.")
         stopCommandParser.add_argument("-t", "--timeout", type=int, help="Wait timeout in seconds.")
+        stopCommandParser.add_argument("-i", "--instance", help="Specific service instance to stop (if not provided all instances will be stopped")
 
         #restart parser
         restartCommandParser = commandParsers.add_parser(
@@ -167,6 +243,7 @@ def main(argv):
         restartCommandParser.add_argument("-t", "--timeout", default="15", type=int, help="Timeout in seconds for service to stop.")
         restartCommandParser.add_argument("-u", "--user", help="Drop privileges to user (also requires --group)")
         restartCommandParser.add_argument("-g", "--group", help="Drop privileges to group (also requires --user)")
+        restartCommandParser.add_argument("-i", "--instance", help="Specific service instance to restart (if not provided all instances will be restarted")
 
         return parser.parse_args(argv[1:])
 

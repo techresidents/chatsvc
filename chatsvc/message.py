@@ -1,3 +1,9 @@
+"""Chat Messages factory and JSON encoding.
+
+This module may need to be moved to trchatsvc, as part of the IDL, to
+allow other services to convert a Message to JSON.
+"""
+
 import json
 import uuid
 
@@ -5,6 +11,12 @@ import trchatsvc.gen.ttypes as ttypes
 from trpycore.timezone import tz
 
 from marker import MarkerFactory, MarkerEncoder
+
+def as_int(n):
+    result = None
+    if n is not None:
+       result = int(n)
+    return result
 
 class MessageFactory(object):
     def __init__(self):
@@ -26,14 +38,34 @@ class MessageFactory(object):
         return factory_method(header, msg)
 
     def create_header(self, header):    
+        route = self.create_route(header.get("route", None))
+
         return ttypes.MessageHeader(
                 id=uuid.uuid4().hex,
                 type=ttypes.MessageType._NAMES_TO_VALUES.get(header.get("type")),
                 chatSessionToken=header.get("chatSessionToken"),
-                userId=header.get("userId"),
-                timestamp=tz.timestamp())
+                userId=as_int(header.get("userId")),
+                timestamp=tz.timestamp(),
+                route=route)
     
+    def create_route(self, route=None):
+        BROADCAST_ROUTE = \
+                ttypes.MessageRouteType._VALUES_TO_NAMES[ttypes.MessageRouteType.BROADCAST_ROUTE]
+
+        route = route or {}
+        result = ttypes.MessageRoute()
+        type = route.get("type", BROADCAST_ROUTE)
+
+        result.type = ttypes.MessageRouteType._NAMES_TO_VALUES[type]
+        result.recipients = route.get("recipients", [])
+
+        return result
+
     def marker_create_message(self, header, msg):
+        NO_ROUTE = \
+                ttypes.MessageRouteType._VALUES_TO_NAMES[ttypes.MessageRouteType.NO_ROUTE]
+
+        header["route"] = {"type": NO_ROUTE}
         header = self.create_header(header)
         message = ttypes.MarkerCreateMessage(
                 markerId=uuid.uuid4().hex,
@@ -44,7 +76,7 @@ class MessageFactory(object):
         header = self.create_header(header)
         message = ttypes.MinuteCreateMessage(
                 minuteId=uuid.uuid4().hex,
-                topicId=msg.get("topicId"),
+                topicId=as_int(msg.get("topicId")),
                 startTimestamp=tz.timestamp())
         return ttypes.Message(header=header, minuteCreateMessage=message)
 
@@ -63,7 +95,7 @@ class MessageFactory(object):
                 tagId=uuid.uuid4().hex,
                 minuteId=msg.get("minuteId"),
                 name=msg.get("name"),
-                tagReferenceId=msg.get("tagReferenceId"))
+                tagReferenceId=as_int(msg.get("tagReferenceId")))
         return ttypes.Message(header=header, tagCreateMessage=message)
 
     def tag_delete_message(self, header, msg):
@@ -138,6 +170,13 @@ class MessageEncoder(json.JSONEncoder):
             "chatSessionToken": obj.chatSessionToken,
             "userId": obj.userId,
             "timestamp": obj.timestamp,
+            "route": self.encode_message_route(obj.route),
+        }
+
+    def encode_message_route(self, obj):
+        return {
+            "type": ttypes.MessageRouteType._VALUES_TO_NAMES[obj.type],
+            "recipients": obj.recipients,
         }
 
     def encode_marker_create_message(self, message):
