@@ -321,5 +321,5 @@ def release(new_version, new_snapshot_version, current_version=None):
     with lcd("{service}-idl".format(**info)):
         local("mvn clean deploy")
 
-    local("git commit -a -m 'Bumping version to {new_major_version}.1-SNAPSHOT'".format(**info))
+    local("git commit -a -m 'Bumping version to {new_snapshot_version}'".format(**info))
     local("git push")
