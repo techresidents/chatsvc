@@ -306,15 +306,6 @@ def release(new_version, new_snapshot_version, current_version=None):
     local("git push --all")
     local("git push --tags")
 
-    #Checkout release branch and bump version for next minor release
-    local("git checkout {release_branch}".format(**info))
-    _file_replace(
-            fileglob="version.py",
-            pattern=r"{new_version}".format(**info),
-            replacement=r"{new_major_version}.1-SNAPSHOT".format(**info))
-    local("git commit -a -m 'Bumping version to {new_major_version}.1-SNAPSHOT'".format(**info))
-    local("git push")
-    
     #Checkout integration branch and merge release
     local("git checkout integration")
     local("git merge --no-ff {release_branch}".format(**info))
