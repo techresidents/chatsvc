@@ -62,6 +62,8 @@ enum MarkerType {
     SPEAKING_MARKER,
     STARTED_MARKER,
     ENDED_MARKER,
+    RECORDING_STARTED_MARKER,
+    RECORDING_ENDED_MARKER,
 }
 
 struct JoinedMarker {
@@ -92,6 +94,16 @@ struct EndedMarker {
     1: i32 userId,
 }
 
+struct RecordingStartedMarker {
+    1: i32 userId,
+    2: string archiveId,
+}
+
+struct RecordingEndedMarker {
+    1: i32 userId,
+    2: string archiveId,
+}
+
 struct Marker {
     1: MarkerType type,
     2: optional JoinedMarker joinedMarker,
@@ -100,6 +112,8 @@ struct Marker {
     5: optional SpeakingMarker speakingMarker,
     6: optional StartedMarker startedMarker,
     7: optional EndedMarker endedMarker,
+    8: optional RecordingStartedMarker recordingStartedMarker,
+    9: optional RecordingEndedMarker recordingEndedMarker,
 }
 
 

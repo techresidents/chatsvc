@@ -60,6 +60,24 @@ def create_ended_marker(marker):
                 )
             )
 
+def create_recording_started_marker(marker):
+    return ttypes.Marker(
+            type=ttypes.MarkerType.RECORDING_STARTED_MARKER,
+            recordingStartedMarker=ttypes.RecordingStartedMarker(
+                userId=marker.get("userId"),
+                archiveId=marker.get("archiveId"),
+                )
+            )
+
+def create_recording_ended_marker(marker):
+    return ttypes.Marker(
+            type=ttypes.MarkerType.RECORDING_ENDED_MARKER,
+            recordingEndedMarker=ttypes.RecordingEndedMarker(
+                userId=marker.get("userId"),
+                archiveId=marker.get("archiveId"),
+                )
+            )
+
 
 MARKER_TYPE_MAP = {
     ttypes.MarkerType.JOINED_MARKER: create_joined_marker,
@@ -68,6 +86,8 @@ MARKER_TYPE_MAP = {
     ttypes.MarkerType.SPEAKING_MARKER: create_speaking_marker,
     ttypes.MarkerType.STARTED_MARKER: create_started_marker,
     ttypes.MarkerType.ENDED_MARKER: create_ended_marker,
+    ttypes.MarkerType.RECORDING_STARTED_MARKER: create_recording_started_marker,
+    ttypes.MarkerType.RECORDING_ENDED_MARKER: create_recording_ended_marker,
 }
 
 class MarkerFactory(object):
@@ -88,6 +108,8 @@ class MarkerEncoder(json.JSONEncoder):
             ttypes.MarkerType.SPEAKING_MARKER: self.encode_speaking_marker,
             ttypes.MarkerType.STARTED_MARKER: self.encode_started_marker,
             ttypes.MarkerType.ENDED_MARKER: self.encode_ended_marker,
+            ttypes.MarkerType.RECORDING_STARTED_MARKER: self.encode_recording_started_marker,
+            ttypes.MarkerType.RECORDING_ENDED_MARKER: self.encode_recording_ended_marker,
         }
 
     def default(self, obj):
@@ -149,4 +171,22 @@ class MarkerEncoder(json.JSONEncoder):
         return {
             "type": type,
             "userId": marker.userId,
+        }
+
+    def encode_recording_started_marker(self, marker):
+        type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
+        marker = marker.recordingStartedMarker
+        return {
+            "type": type,
+            "userId": marker.userId,
+            "archiveId": marker.archiveId,
+        }
+
+    def encode_recording_ended_marker(self, marker):
+        type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
+        marker = marker.recordingEndedMarker
+        return {
+            "type": type,
+            "userId": marker.userId,
+            "archiveId": marker.archiveId,
         }
