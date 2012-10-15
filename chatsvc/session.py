@@ -1,4 +1,5 @@
 import bisect
+import datetime
 
 from gevent.event import Event
 from sqlalchemy.orm import joinedload
@@ -110,8 +111,9 @@ class ChatSession(object):
         
         if self.loaded:
             now = tz.utcnow()
+            end = self.chat.end + datetime.timedelta(minutes=5)
             return now > self.chat.start \
-                    and now < self.chat.end \
+                    and now < end \
                     and not self.completed
         else:
             return False
@@ -151,7 +153,8 @@ class ChatSession(object):
             False otherwise.
         """
         if self.loaded:
-            return tz.utcnow() > self.chat.end
+            end = self.chat.end + datetime.timedelta(minutes=5)
+            return tz.utcnow() > end
         else:
             return True
 
