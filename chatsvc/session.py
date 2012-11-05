@@ -29,6 +29,8 @@ class ChatSession(object):
 
         #model attributes
         self.id = None
+        self.connect = None
+        self.publish = None
         self.start = None
         self.end = None
 
@@ -173,6 +175,8 @@ class ChatSession(object):
                         .one()
 
                 self.id = model.id
+                self.connect = model.connect
+                self.publish = model.publish
                 self.start = model.start
                 self.end = model.end
                 self.chat = model.chat
@@ -215,6 +219,8 @@ class ChatSession(object):
                     .options(joinedload("chat"))\
                     .filter_by(token=self.token)\
                     .one()
+            model.connect = self.connect
+            model.publish = self.publish
             model.start = self.start
             model.end = self.end
             session.commit()

@@ -32,6 +32,18 @@ class ChatMarkerMessageHandler(MessageHandler):
     def create(service_handler):
         """ChatMarkerMessageHandler factory method."""
         return ChatMarkerMessageHandler(service_handler)
+
+    def _handle_connected_marker(self, request_context, chat_session, message):
+        """CONNECTED_MARKER handler method."""
+        if not chat_session.connect:
+            chat_session.connect = tz.timestamp_to_utc(message.header.timestamp)
+            chat_session.save()
+
+    def _handle_publishing_marker(self, request_context, chat_session, message):
+        """PUBLISHING_MARKER handler method."""
+        if not chat_session.publish:
+            chat_session.publish = tz.timestamp_to_utc(message.header.timestamp)
+            chat_session.save()
     
     def _handle_started_marker(self, request_context, chat_session, message):
         """STARTED_MARKER handler method."""
@@ -70,7 +82,11 @@ class ChatMarkerMessageHandler(MessageHandler):
             and should be propagated.
         """
         marker = message.markerCreateMessage.marker
-        if marker.type == MarkerType.STARTED_MARKER:
+        if marker.type == MarkerType.CONNECTED_MARKER:
+            self._handle_connected_marker(request_context, chat_session, message)
+        elif marker.type == MarkerType.PUBLISHING_MARKER:
+            self._handle_publishing_marker(request_context, chat_session, message)
+        elif marker.type == MarkerType.STARTED_MARKER:
             self._handle_started_marker(request_context, chat_session, message)
         elif marker.type == MarkerType.ENDED_MARKER:
             self._handle_ended_marker(request_context, chat_session, message)

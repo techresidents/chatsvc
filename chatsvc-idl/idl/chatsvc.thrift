@@ -127,15 +127,15 @@ struct MarkerCreateMessage {
 struct MinuteCreateMessage {
     1: optional string minuteId, 
     2: i32 topicId,   
-    3: optional i64 startTimestamp,
-    4: optional i64 endTimestamp,
+    3: optional double startTimestamp,
+    4: optional double endTimestamp,
 }
 
 struct MinuteUpdateMessage {
     1: string minuteId, 
     2: i32 topicId,   
-    3: i64 startTimestamp,
-    4: optional i64 endTimestamp,
+    3: double startTimestamp,
+    4: optional double endTimestamp,
 }
 
 struct TagCreateMessage {
@@ -203,6 +203,8 @@ struct ChatSessionSnapshot {
     3: double endTimestamp,
     4: list<Message> messages,
     5: bool persisted,
+    6: double connectTimestamp,
+    7: double publishTimestamp,
 }
 
 struct ReplicationSnapshot {

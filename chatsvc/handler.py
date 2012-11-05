@@ -383,6 +383,14 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         """
         chat_session_snapshot = replicationSnapshot.chatSessionSnapshot
         chat_session = self.chat_sessions_manager.get(chat_session_snapshot.token)
+
+        #update connect timestamp
+        if chat_session_snapshot.connectTimestamp > 0:
+            chat_session.connect = tz.timestamp_to_utc(chat_session_snapshot.connectTimestamp)
+
+        #update publish timestamp
+        if chat_session_snapshot.publishTimestamp > 0:
+            chat_session.publish = tz.timestamp_to_utc(chat_session_snapshot.publishTimestamp)
         
         #update start timestamp
         if chat_session_snapshot.startTimestamp > 0:
