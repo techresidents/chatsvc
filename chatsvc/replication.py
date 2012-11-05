@@ -292,6 +292,14 @@ class Replicator(object):
         """
         #TODO - make this more robust
         full_snapshot = len(chat_session.messages) == len(messages)
+
+        connect_timestamp = 0
+        if chat_session.connect:
+            connect_timestamp = tz.utc_to_timestamp(chat_session.connect)
+
+        publish_timestamp = 0
+        if chat_session.publish:
+            publish_timestamp = tz.utc_to_timestamp(chat_session.publish)
         
         start_timestamp = 0
         if chat_session.start:
@@ -304,6 +312,8 @@ class Replicator(object):
 
         chat_session_snapshot = ChatSessionSnapshot(
                 token=chat_session.token,
+                connectTimestamp=connect_timestamp,
+                publishTimestamp=publish_timestamp,
                 startTimestamp=start_timestamp,
                 endTimestamp=end_timestamp,
                 messages=messages,
