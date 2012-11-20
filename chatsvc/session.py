@@ -110,15 +110,17 @@ class ChatSession(object):
         taking place and not yet completed, False
         otherwise.
         """
-        
-        if self.loaded:
+        result = False
+        if self.loaded and not self.end:
             now = tz.utcnow()
-            end = self.chat.end + datetime.timedelta(minutes=5)
-            return now > self.chat.start \
-                    and now < end \
-                    and not self.completed
-        else:
-            return False
+            if self.connect:
+                chat_duration = self.chat.end - self.chat.start
+                connect_duration = now - self.connect
+                result = connect_duration < chat_duration + datetime.timedelta(minutes=10)
+            else:
+                max_start = self.chat.start + datetime.timedelta(days=1)
+                result = now > self.chat.start and now < max_start
+        return result
 
     @property
     def started(self):
@@ -129,7 +131,7 @@ class ChatSession(object):
             False otherwise.
         """
         if self.start:
-            return tz.utcnow() > self.start
+            return True
         else:
             return False
 
@@ -142,7 +144,7 @@ class ChatSession(object):
             False otherwise.
         """
         if self.end:
-            return tz.utcnow() > self.end
+            return True
         else:
             return False
 
@@ -154,11 +156,19 @@ class ChatSession(object):
             True if chat session is expired (past chat end time),
             False otherwise.
         """
-        if self.loaded:
-            end = self.chat.end + datetime.timedelta(minutes=5)
-            return tz.utcnow() > end
+        result = False
+        if self.end:
+            result = True
         else:
-            return True
+            now = tz.utcnow()
+            if self.connect:
+                chat_duration = self.chat.end - self.chat.start
+                connect_duration = now - self.connect
+                result = connect_duration > chat_duration + datetime.timedelta(minutes=10)
+            else:
+                max_start = self.chat.start + datetime.timedelta(days=1)
+                result = now > max_start
+        return result
 
     def load(self):
         """Load chat session from database.
