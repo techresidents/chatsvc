@@ -78,6 +78,16 @@ def create_recording_ended_marker(marker):
                 )
             )
 
+def create_skew_marker(marker):
+    return ttypes.Marker(
+            type=ttypes.MarkerType.SKEW_MARKER,
+            skewMarker=ttypes.SkewMarker(
+                userId=marker.get("userId"),
+                userTimestamp=marker.get("userTimestamp"),
+                systemTimestamp=marker.get("systemTimestamp"),
+                skew=marker.get("skew")
+                )
+            )
 
 MARKER_TYPE_MAP = {
     ttypes.MarkerType.JOINED_MARKER: create_joined_marker,
@@ -88,6 +98,7 @@ MARKER_TYPE_MAP = {
     ttypes.MarkerType.ENDED_MARKER: create_ended_marker,
     ttypes.MarkerType.RECORDING_STARTED_MARKER: create_recording_started_marker,
     ttypes.MarkerType.RECORDING_ENDED_MARKER: create_recording_ended_marker,
+    ttypes.MarkerType.SKEW_MARKER: create_skew_marker,
 }
 
 class MarkerFactory(object):
@@ -110,6 +121,7 @@ class MarkerEncoder(json.JSONEncoder):
             ttypes.MarkerType.ENDED_MARKER: self.encode_ended_marker,
             ttypes.MarkerType.RECORDING_STARTED_MARKER: self.encode_recording_started_marker,
             ttypes.MarkerType.RECORDING_ENDED_MARKER: self.encode_recording_ended_marker,
+            ttypes.MarkerType.SKEW_MARKER: self.encode_skew_marker,
         }
 
     def default(self, obj):
@@ -189,4 +201,15 @@ class MarkerEncoder(json.JSONEncoder):
             "type": type,
             "userId": marker.userId,
             "archiveId": marker.archiveId,
+        }
+
+    def encode_skew_marker(self, marker):
+        type = ttypes.MarkerType._VALUES_TO_NAMES[marker.type]
+        marker = marker.skewMarker
+        return {
+            "type": type,
+            "userId": marker.userId,
+            "userTimestamp": marker.userTimestamp,
+            "systemTimestamp": marker.systemTimestamp,
+            "skew": marker.skew,
         }
