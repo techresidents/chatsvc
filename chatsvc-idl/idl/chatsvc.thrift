@@ -64,6 +64,7 @@ enum MarkerType {
     ENDED_MARKER,
     RECORDING_STARTED_MARKER,
     RECORDING_ENDED_MARKER,
+    SKEW_MARKER
 }
 
 struct JoinedMarker {
@@ -104,6 +105,13 @@ struct RecordingEndedMarker {
     2: string archiveId,
 }
 
+struct SkewMarker {
+    1: i32 userId,
+    2: double userTimestamp,
+    3: optional double systemTimestamp,
+    4: optional double skew
+}
+
 struct Marker {
     1: MarkerType type,
     2: optional JoinedMarker joinedMarker,
@@ -114,6 +122,7 @@ struct Marker {
     7: optional EndedMarker endedMarker,
     8: optional RecordingStartedMarker recordingStartedMarker,
     9: optional RecordingEndedMarker recordingEndedMarker,
+    10: optional SkewMarker skewMarker
 }
 
 

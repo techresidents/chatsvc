@@ -57,6 +57,12 @@ class ChatMarkerMessageHandler(MessageHandler):
             chat_session.end = tz.timestamp_to_utc(message.header.timestamp)
             chat_session.save()
 
+    def _handle_skew_marker(self, request_context, chat_session, message):
+        """SKEW_MARKER handler method."""
+        msg = message.markerCreateMessage.marker.skewMarker
+        msg.systemTimestamp = tz.timestamp()
+        msg.skew = msg.userTimestamp - msg.systemTimestamp 
+
     def handled_message_types(self):
         """Return a list of handled message types.
 
@@ -90,6 +96,8 @@ class ChatMarkerMessageHandler(MessageHandler):
             self._handle_started_marker(request_context, chat_session, message)
         elif marker.type == MarkerType.ENDED_MARKER:
             self._handle_ended_marker(request_context, chat_session, message)
+        elif marker.type == MarkerType.SKEW_MARKER:
+            self._handle_skew_marker(request_context, chat_session, message)
 
         return []
 
