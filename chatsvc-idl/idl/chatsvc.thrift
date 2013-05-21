@@ -20,8 +20,8 @@ exception InvalidMessageException {
 /* Message types */
 
 enum MessageType {
-    USER_STATE,
-    CHAT_STATE
+    USER_STATUS,
+    CHAT_STATUS
 }
 
 /* Message route types */
@@ -49,16 +49,16 @@ struct MessageHeader {
     6: MessageRoute route
 }
 
-/* User State */
+/* User Status */
 
-enum UserState {
+enum UserStatus {
     UNAVAILABLE,
     AVAILABLE,
     CONNECTED
 }
 
-/* Chat State */
-enum ChatState {
+/* Chat Status*/
+enum ChatStatus {
     PENDING,
     STARTED,
     ENDED
@@ -66,21 +66,21 @@ enum ChatState {
 
 /* Chat Messages */
 
-struct UserStateMessage {
+struct UserStatusMessage {
     1: i32 userId,
-    2: UserState state
+    2: UserStatus status
 }
 
-struct ChatStateMessage {
+struct ChatStatusMessage {
     1: i32 userId,
-    2: ChatState state
+    2: ChatStatus status
 }
 
 
 struct Message {
     1: MessageHeader header,
-    2: optional UserStateMessage userStateMessage,
-    3: optional ChatStateMessage chatStateMessage
+    2: optional UserStatusMessage userStatusMessage,
+    3: optional ChatStatusMessage chatStatusMessage
 }
 
 
@@ -97,25 +97,25 @@ struct HashringNode {
 
 /* Replication */
 
-/* User */
-struct User {
+/* User State */
+struct UserState {
     1: i32 userId,
-    2: UserState state
+    2: UserStatus status
 }
 
-/* Chat */
-struct Chat {
+/* Chat State */
+struct ChatState {
     1: string token,
-    2: ChatState state,
+    2: ChatStatus status,
     3: double startTimestamp,
     4: double endTimestamp,
-    5: list<User> users,
+    5: list<UserState> users,
     6: list<Message> messages
 }
 
 struct ChatSnapshot {
     1: bool fullSnapshot,
-    2: Chat chat 
+    2: ChatState state
 }
 
 
