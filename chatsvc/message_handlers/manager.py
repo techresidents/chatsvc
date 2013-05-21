@@ -1,6 +1,8 @@
 import logging
+import uuid
 
-from trchatsvc.gen.ttypes import MessageType
+from trpycore.timezone import tz
+from trchatsvc.gen.ttypes import MessageType, MessageRoute, MessageRouteType
 from message_handlers.base import MessageHandlerException
 
 class MessageHandlerManager(object):
@@ -68,24 +70,33 @@ class MessageHandlerManager(object):
             self.handlers[message_type] = []
         return self.handlers[message_type]
 
-    def _default_handle(self, request_context, chat_session, message):
+    def _default_handle(self, request_context, chat, message):
         """Default handle method which should be applied to all messages.
 
         Args:
             request_context: RequestContext object
-            chat_session: ChatSession object
+            chat: Chat object
             message: Message object
         """
-        if message.header.type != MessageType.MARKER_CREATE:
-            if not chat_session.active:
-                raise MessageHandlerException("chat session closed.")
+        if message.header.id is None:
+            message.header.id = uuid.uuid4().hex
+        if message.header.timestamp is None:
+            message.header.timestamp = tz.timestamp()
+        if message.header.route is None:
+            message.header.route = MessageRoute(
+                    MessageRouteType.BROADCAST_ROUTE)
 
-    def handle(self, request_context, chat_session, message):
+        message_types = [MessageType.USER_STATE, MessageType.CHAT_STATE]
+        if message.header.type not in message_types:
+            if not chat.active:
+                raise MessageHandlerException("chat closed.")
+
+    def handle(self, request_context, chat, message):
         """Handle a message.
 
         Args:
             request_context: RequestContext object
-            chat_session: ChatSession object
+            chat: Chat object
             message: Message object
         Returns:
             list of additional Message objects to propagate.
@@ -99,14 +110,14 @@ class MessageHandlerManager(object):
         result = []
         
         try:
-            self._default_handle(request_context, chat_session, message)
+            self._default_handle(request_context, chat, message)
 
             message_type = message.header.type
             handlers = self._get_handlers(message_type)
 
             if handlers:
                 for handler in handlers:
-                    messages = handler.handle(request_context, chat_session, message)
+                    messages = handler.handle(request_context, chat, message)
                     if messages:
                         result.extend(messages)
         except MessageHandlerException:

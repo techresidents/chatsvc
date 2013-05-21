@@ -15,7 +15,7 @@ class MessageHandler(object):
     Each handler is repsonsible for validating the message.
     If the message is not valid a MessageHandlerException
     should be raised. Note that invalid messages will
-    NOT be replicated or persisted.
+    NOT be replicated.
 
     Following validation, a handler may choose to modify the
     message as needed, and optionally return a list of
@@ -43,12 +43,12 @@ class MessageHandler(object):
         return
 
     @abc.abstractmethod
-    def handle(self, request_context, chat_session, message):
+    def handle(self, request_context, chat, message):
         """Handle a message.
 
         Args:
             request_context: RequestContext object
-            chat_session: ChatSession object
+            chat: Chat object
             message: Message object
         Returns:
             list of additional Message objects to propagate.

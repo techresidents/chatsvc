@@ -5,9 +5,9 @@ import gevent
 class GarbageCollectionEvent(object):
     ZOMBIE_SESSION_EVENT = "ZOMBIE_SESSION_EVENT"
 
-    def __init__(self, event_type, chat_session):
+    def __init__(self, event_type, chat):
         self.event_type = event_type
-        self.chat_session = chat_session
+        self.chat = chat
 
 class GarbageCollector(object):
     
@@ -15,12 +15,12 @@ class GarbageCollector(object):
             self,
             service,
             hashring,
-            chat_sessions_manager,
+            chat_manager,
             interval,
             throttle):
         self.service = service
         self.hashring = hashring
-        self.chat_session_manager = chat_sessions_manager
+        self.chat_manager = chat_manager
         self.interval = interval
         self.throttle = throttle
         self.observers = []
@@ -36,18 +36,18 @@ class GarbageCollector(object):
                 self.log.error("gc observer exception")
                 self.log.exception(error)
 
-    def _gc_chat_session(self, chat_session):
-        if chat_session.completed or chat_session.expired:
-            if chat_session.persisted:
-                self.log.info("garbage collecting chat session (id=%s)" \
-                    % chat_session.id)
-                self.chat_session_manager.remove(chat_session.token)
+    def _gc_chat(self, chat):
+        if chat.completed or chat.expired:
+            if chat.persisted:
+                self.log.info("garbage collecting chat (id=%s)" \
+                    % chat.id)
+                self.chat_manager.remove(chat.token)
             else:
-                self.log.info("zombie chat session dectected (id=%s)" \
-                        % chat_session.id)
+                self.log.info("zombie chat dectected (id=%s)" \
+                        % chat.id)
                 event = GarbageCollectionEvent(
                         GarbageCollectionEvent.ZOMBIE_SESSION_EVENT,
-                        chat_session)
+                        chat)
                 self._notify_observers(event)
   
     def add_observer(self, observer):
@@ -68,9 +68,9 @@ class GarbageCollector(object):
             try:
                 #note that itervalues should not be used in place of values,
                 #since we will be modifying the underlying dict
-                for chat_session in self.chat_session_manager.all().values():
-                    if chat_session.completed or chat_session.expired:
-                        self._gc_chat_session(chat_session)
+                for chat in self.chat_manager.all().values():
+                    #if chat.completed or chat.expired:
+                    #    self._gc_chat(chat)
                     if self.throttle:
                         gevent.sleep(self.throttle)
             except gevent.GreenletExit:

@@ -6,39 +6,36 @@ include "core.thrift"
 /* Exceptions */
 
 exception UnavailableException {
-    1: string fault,
+    1: string fault
+}
+
+exception InvalidChatException {
+    1: string fault
 }
 
 exception InvalidMessageException {
-    1: string fault,
+    1: string fault
 }
-
 
 /* Message types */
 
 enum MessageType {
-    TAG_CREATE = 100,
-    TAG_DELETE = 101,
-    WHITEBOARD_CREATE = 200,
-    WHITEBOARD_DELETE = 201,
-    WHITEBOARD_CREATE_PATH = 202,
-    WHITEBOARD_DELETE_PATH = 203,
-    MINUTE_CREATE = 300,
-    MINUTE_UPDATE = 301,
-    MARKER_CREATE = 400,
+    USER_STATE,
+    CHAT_STATE
 }
 
+/* Message route types */
 enum MessageRouteType {
     NO_ROUTE,
     BROADCAST_ROUTE,
-    TARGETED_ROUTE,
+    TARGETED_ROUTE
 }
 
 /* MessageRoute */
 
 struct MessageRoute {
     1: MessageRouteType type,
-    2: optional list<i32> recipients,
+    2: optional list<i32> recipients
 }
 
 /* Message header */
@@ -46,149 +43,44 @@ struct MessageRoute {
 struct MessageHeader {
     1: optional string id,
     2: MessageType type,
-    3: string chatSessionToken,
+    3: string chatToken,
     4: i32 userId,
     5: double timestamp,
-    6: MessageRoute route,
+    6: MessageRoute route
 }
 
+/* User State */
 
-/* Chat Markers */
-
-enum MarkerType {
-    JOINED_MARKER,
-    CONNECTED_MARKER,
-    PUBLISHING_MARKER,
-    SPEAKING_MARKER,
-    STARTED_MARKER,
-    ENDED_MARKER,
-    RECORDING_STARTED_MARKER,
-    RECORDING_ENDED_MARKER,
-    SKEW_MARKER
+enum UserState {
+    UNAVAILABLE,
+    AVAILABLE,
+    CONNECTED
 }
 
-struct JoinedMarker {
-    1: i32 userId,
-    2: string name,
+/* Chat State */
+enum ChatState {
+    PENDING,
+    STARTED,
+    ENDED
 }
-
-struct ConnectedMarker {
-    1: i32 userId,
-    2: bool isConnected,
-}
-
-struct PublishingMarker {
-    1: i32 userId,
-    2: bool isPublishing,
-}
-
-struct SpeakingMarker {
-    1: i32 userId,
-    2: bool isSpeaking,
-}
-
-struct StartedMarker {
-    1: i32 userId,
-}
-
-struct EndedMarker {
-    1: i32 userId,
-}
-
-struct RecordingStartedMarker {
-    1: i32 userId,
-    2: string archiveId,
-}
-
-struct RecordingEndedMarker {
-    1: i32 userId,
-    2: string archiveId,
-}
-
-struct SkewMarker {
-    1: i32 userId,
-    2: double userTimestamp,
-    3: optional double systemTimestamp,
-    4: optional double skew
-}
-
-struct Marker {
-    1: MarkerType type,
-    2: optional JoinedMarker joinedMarker,
-    3: optional ConnectedMarker connectedMarker,
-    4: optional PublishingMarker publishingMarker,
-    5: optional SpeakingMarker speakingMarker,
-    6: optional StartedMarker startedMarker,
-    7: optional EndedMarker endedMarker,
-    8: optional RecordingStartedMarker recordingStartedMarker,
-    9: optional RecordingEndedMarker recordingEndedMarker,
-    10: optional SkewMarker skewMarker
-}
-
 
 /* Chat Messages */
 
-struct MarkerCreateMessage {
-    1: optional string markerId,
-    2: Marker marker,
+struct UserStateMessage {
+    1: i32 userId,
+    2: UserState state
 }
 
-struct MinuteCreateMessage {
-    1: optional string minuteId, 
-    2: i32 topicId,   
-    3: optional double startTimestamp,
-    4: optional double endTimestamp,
+struct ChatStateMessage {
+    1: i32 userId,
+    2: ChatState state
 }
 
-struct MinuteUpdateMessage {
-    1: string minuteId, 
-    2: i32 topicId,   
-    3: double startTimestamp,
-    4: optional double endTimestamp,
-}
-
-struct TagCreateMessage {
-    1: optional string tagId, 
-    2: optional i32 tagReferenceId,   
-    3: string minuteId,   
-    4: string name, 
-}
-
-struct TagDeleteMessage {
-    1: string tagId,   
-}
-
-struct WhiteboardCreateMessage {
-    1: optional string whiteboardId, 
-    2: string name,
-}
-
-struct WhiteboardDeleteMessage {
-    1: string whiteboardId, 
-}
-
-struct WhiteboardCreatePathMessage {
-    1: string whiteboardId,
-    2: optional string pathId, 
-    3: string pathData,
-}
-
-struct WhiteboardDeletePathMessage {
-    1: string whiteboardId,
-    2: string pathId, 
-}
 
 struct Message {
     1: MessageHeader header,
-    2: optional TagCreateMessage tagCreateMessage,
-    3: optional TagDeleteMessage tagDeleteMessage,
-    4: optional WhiteboardCreateMessage whiteboardCreateMessage,
-    5: optional WhiteboardDeleteMessage whiteboardDeleteMessage,
-    6: optional WhiteboardCreatePathMessage whiteboardCreatePathMessage,
-    7: optional WhiteboardDeletePathMessage whiteboardDeletePathMessage,
-    8: optional MinuteCreateMessage minuteCreateMessage,
-    9: optional MinuteUpdateMessage minuteUpdateMessage,
-    10: optional MarkerCreateMessage markerCreateMessage,
+    2: optional UserStateMessage userStateMessage,
+    3: optional ChatStateMessage chatStateMessage
 }
 
 
@@ -200,25 +92,30 @@ struct HashringNode {
     3: string serviceAddress,
     4: i32 servicePort,
     5: string hostname,
-    6: string fqdn,
+    6: string fqdn
 }
 
 /* Replication */
 
-/* Chat Session Snapshot */
-struct ChatSessionSnapshot {
-    1: string token,
-    2: double startTimestamp,
-    3: double endTimestamp,
-    4: list<Message> messages,
-    5: bool persisted,
-    6: double connectTimestamp,
-    7: double publishTimestamp,
+/* User */
+struct User {
+    1: i32 userId,
+    2: UserState state
 }
 
-struct ReplicationSnapshot {
+/* Chat */
+struct Chat {
+    1: string token,
+    2: ChatState state,
+    3: double startTimestamp,
+    4: double endTimestamp,
+    5: list<User> users,
+    6: list<Message> messages
+}
+
+struct ChatSnapshot {
     1: bool fullSnapshot,
-    2: ChatSessionSnapshot chatSessionSnapshot,
+    2: Chat chat 
 }
 
 
@@ -230,14 +127,16 @@ service TChatService extends core.TRService
     
     list<HashringNode> getPreferenceList(
             1: core.RequestContext requestContext,
-            2: string chatSessionToken),
+            2: string chatToken),
 
     list<Message> getMessages(
             1: core.RequestContext requestContext,
-            2: string chatSessionToken,
+            2: string chatToken,
             3: double asOf,
             4: bool block,
-            5: i32 timeout) throws (1:UnavailableException e),
+            5: i32 timeout) throws (
+                1:UnavailableException unavailableException,
+                2:InvalidChatException invalidChatException)
 
     Message sendMessage(
             1: core.RequestContext requestContext,
@@ -245,11 +144,19 @@ service TChatService extends core.TRService
             3: i32 N,
             4: i32 W) throws (
                 1:UnavailableException unavailableException,
-                2:InvalidMessageException invalidMessageException), 
+                2:InvalidChatException invalidChatException, 
+                3:InvalidMessageException invalidMessageException), 
+
+    string twilioRequest(
+            1: core.RequestContext requestContext,
+            2: string path
+            3: map<string, string> params) throws (
+                1:UnavailableException unavailableException,
+                2:InvalidChatException invalidChatException)
 
     void replicate(
             1: core.RequestContext requestContext,
-            2: ReplicationSnapshot replicationSnapshot),
+            2: ChatSnapshot chatSnapshot),
 
     bool expireZookeeperSession(
             1: core.RequestContext requestContext,
