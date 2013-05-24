@@ -1,30 +1,31 @@
+import json
+from string import Template
+
 from twilio_handlers.base import TwilioHandler
 from twilio_handlers.manager import TwilioHandlerManager
 
-START_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+START_TEMPLATE = Template("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Please record your message at the beep.</Say>
-    <Record action="twilio_voice_end?chat_token=blahblah" method="GET" maxLength="30" />
+    <Record action="twilio_voice_end?chat_token=blahblah" method="GET" maxLength="$max_duration" />
 </Response>
-"""
+""")
 
-SAY_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+MULTI_START_TEMPLATE = Template("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>Please record your message at the beep.</Say>
-    <Hangup/>
+    <Say>Welcome to the conference.</Say>
+    <Dial action="twilio_voice_end?chat_token=$chat_token" record="true">
+        <Conference maxParticipants="$max_participants">$chat_token</Conference>
+    </Dial>
 </Response>
-"""
+""")
 
-START_MULTI_TEMPLATE = """
-"""
-
-END_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+END_TEMPLATE = Template("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Thank you.</Say>
     <Hangup/>
 </Response>
-"""
-
+""")
 
 
 class VoiceHandler(TwilioHandler):
@@ -41,7 +42,7 @@ class VoiceHandler(TwilioHandler):
         Returns:
             list of requeset paths handled by this handler.
         """
-        return ["/chatsvc/twilio_voice", "/chatsvc/twilio_voice_end", "/chatsvc/twilio_status"]
+        return ["/chatsvc/twilio_voice", "/chatsvc/twilio_voice_end"]
 
     def handle(self, request_context, chat, path, params):
         """Handle a request.
@@ -63,8 +64,6 @@ class VoiceHandler(TwilioHandler):
         elif path == "/chatsvc/twilio_voice_end":
             return self._handle_twilio_voice_end(
                     request_context, chat, path, params)
-        elif path == "/chatsvc/twilio_status":
-            return SAY_TEMPLATE
 
     def _handle_twilio_voice(self, request_context, chat, path, params):
         """Handle a request.
@@ -80,9 +79,38 @@ class VoiceHandler(TwilioHandler):
             TwilioHandlerException if the message is invalid
             and should be propagated.
         """
-        print 'called'
-        print params
-        return START_TEMPLATE
+        context = {
+            "chat_token": chat.state.token,
+            "max_duration": chat.state.maxDuration,
+            "max_participants": chat.state.maxParticipants
+        }
+
+        twilio_data = chat.state.session.get("twilio_data")
+        if twilio_data:
+            twilio_data = json.loads(twilio_data)
+        else:
+            twilio_data = {
+                "users": {}
+            }
+        
+        user_id = params.get("user_id")
+        call_sid = params.get("CallSid")
+
+        #add call sid in chat state and replicate state to
+        #other chatsvc nodes
+        twilio_data["users"][user_id] = {
+            "call_sid": call_sid
+        }
+        chat.state.session["twilio_data"] = json.dumps(twilio_data)
+        self.service_handler.replicator.replicate(chat, [])
+        
+        if chat.state.maxParticipants == 1:
+            result = START_TEMPLATE.substitute(context)
+        else:
+            result = MULTI_START_TEMPLATE.substitute(context)
+        
+        #zmp doesn't support unicode strings so convert to string
+        return str(result)
 
     def _handle_twilio_voice_end(self, request_context, chat, path, params):
         """Handle a request.
@@ -98,8 +126,11 @@ class VoiceHandler(TwilioHandler):
             TwilioHandlerException if the message is invalid
             and should be propagated.
         """
-        print params
-        return END_TEMPLATE
+        context = {}
+        result = END_TEMPLATE.substitute(context)
+        
+        #zmp doesn't support unicode strings so convert to string
+        return str(result)
     
 
 #Register handler factory method with TwilioHandlerManager.

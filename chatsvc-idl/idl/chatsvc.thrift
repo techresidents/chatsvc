@@ -53,7 +53,7 @@ struct MessageHeader {
 
 enum UserStatus {
     UNAVAILABLE,
-    AVAILABLE,
+    DISCONNECTED,
     CONNECTED
 }
 
@@ -68,7 +68,9 @@ enum ChatStatus {
 
 struct UserStatusMessage {
     1: i32 userId,
-    2: UserStatus status
+    2: UserStatus status,
+    3: optional string firstName,
+    4: optional i32 participant
 }
 
 struct ChatStatusMessage {
@@ -100,17 +102,22 @@ struct HashringNode {
 /* User State */
 struct UserState {
     1: i32 userId,
-    2: UserStatus status
+    2: UserStatus status,
+    3: double updateTimestamp
 }
 
 /* Chat State */
 struct ChatState {
     1: string token,
     2: ChatStatus status,
-    3: double startTimestamp,
-    4: double endTimestamp,
-    5: list<UserState> users,
-    6: list<Message> messages
+    3: i32  maxDuration,
+    4: i32  maxParticipants,
+    5: double startTimestamp,
+    6: double endTimestamp,
+    7: map<i32, UserState> users,
+    8: list<Message> messages,
+    9: bool persisted,
+    10: map<string, string> session
 }
 
 struct ChatSnapshot {

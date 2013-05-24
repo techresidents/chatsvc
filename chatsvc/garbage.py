@@ -38,7 +38,8 @@ class GarbageCollector(object):
 
     def _gc_chat(self, chat):
         if chat.completed or chat.expired:
-            if chat.persisted:
+            #TODO
+            if True or chat.persisted:
                 self.log.info("garbage collecting chat (id=%s)" \
                     % chat.id)
                 self.chat_manager.remove(chat.token)
@@ -69,8 +70,8 @@ class GarbageCollector(object):
                 #note that itervalues should not be used in place of values,
                 #since we will be modifying the underlying dict
                 for chat in self.chat_manager.all().values():
-                    #if chat.completed or chat.expired:
-                    #    self._gc_chat(chat)
+                    if chat.completed or chat.expired:
+                        self._gc_chat(chat)
                     if self.throttle:
                         gevent.sleep(self.throttle)
             except gevent.GreenletExit:

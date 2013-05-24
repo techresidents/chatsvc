@@ -80,7 +80,7 @@ LOGGING = {
     "handlers": {
 
         "console_handler": {
-            "level": "INFO",
+            "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "brief_formatter",
             "stream": "ext://sys.stdout"

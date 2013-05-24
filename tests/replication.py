@@ -3,7 +3,7 @@ import unittest
 
 import gevent
 
-from testbase import DistributedTestCase, create_chat, delete_chat, build_user_state_message
+from testbase import DistributedTestCase, create_chat, delete_chat, build_user_status_message
 
 
 class ReplicationTest(DistributedTestCase):
@@ -32,10 +32,10 @@ class ReplicationTest(DistributedTestCase):
         chat = self.service.handler.chat_manager.get(self.chat_token)
         chat2 = self.service2.handler.chat_manager.get(self.chat_token)
 
-        length = len(chat.messages)
-        length2 = len(chat2.messages)
+        length = len(chat.state.messages)
+        length2 = len(chat2.state.messages)
 
-        message = build_user_state_message(self.chat_token)
+        message = build_user_status_message(self.chat_token)
         
         self.service_proxy.sendMessage(
                 requestContext=self.request_context,
@@ -43,7 +43,7 @@ class ReplicationTest(DistributedTestCase):
                 N=2,
                 W=1)
 
-        message2 = build_user_state_message(self.chat_token)
+        message2 = build_user_status_message(self.chat_token)
         self.service_proxy.sendMessage(
                 requestContext=self.request_context,
                 message=message2,
@@ -52,17 +52,17 @@ class ReplicationTest(DistributedTestCase):
 
         gevent.sleep(1)
         
-        self.assertEqual(len(chat.messages), length+2)
-        self.assertEqual(len(chat2.messages), length2+2)
+        self.assertEqual(len(chat.state.messages), length+2)
+        self.assertEqual(len(chat2.state.messages), length2+2)
   
     def test_replication_reconnection(self):
         chat = self.service.handler.chat_manager.get(self.chat_token)
         chat2 = self.service2.handler.chat_manager.get(self.chat_token)
 
-        length = len(chat.messages)
-        length2 = len(chat2.messages)
+        length = len(chat.state.messages)
+        length2 = len(chat2.state.messages)
 
-        message = build_user_state_message(self.chat_token)
+        message = build_user_status_message(self.chat_token)
         
         #basic replication
         self.service_proxy.sendMessage(
@@ -73,8 +73,8 @@ class ReplicationTest(DistributedTestCase):
 
         gevent.sleep(1)
         
-        self.assertEqual(len(chat.messages), length+1)
-        self.assertEqual(len(chat2.messages), length2+1)
+        self.assertEqual(len(chat.state.messages), length+1)
+        self.assertEqual(len(chat2.state.messages), length2+1)
         self.service.handler.hashring.stop()
         self.service.handler.hashring.join()
         gevent.sleep(1)
@@ -83,7 +83,7 @@ class ReplicationTest(DistributedTestCase):
         gevent.sleep(1)
 
         chat = self.service.handler.chat_manager.get(self.chat_token)
-        self.assertEqual(len(chat.messages), length+1)
+        self.assertEqual(len(chat.state.messages), length+1)
 
 if __name__ == '__main__':
     unittest.main()

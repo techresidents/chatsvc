@@ -1,9 +1,12 @@
 import bisect
+import logging
 
 from gevent.event import Event
+from sqlalchemy.orm.exc import NoResultFound
 
+from trpycore.timezone import tz
 from trsvcscore.db.models import Chat as ChatModel
-from trchatsvc.gen.ttypes import MessageRouteType
+from trchatsvc.gen.ttypes import MessageRouteType, ChatState, ChatStatus
 
 class Chat(object):
     """Chat object.
@@ -20,16 +23,23 @@ class Chat(object):
             service_handler: ChatServiceHandler object
             chat_token: chat token.
         """
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.service_handler = service_handler
+        self.state = ChatState(
+                token=chat_token,
+                status=ChatStatus.PENDING,
+                maxDuration=0,
+                maxParticipants=0,
+                startTimestamp=0,
+                endTimestamp=0,
+                users={},
+                persisted=False,
+                session={},
+                messages=[])
         self.token = chat_token
 
-        #model attributes
+        #database model id
         self.id = None
-        self.start = None
-        self.end = None
-
-        #Chat model
-        self.chat_model = None
 
         #loaded event which will be triggered
         #when the chat session is successfully
@@ -41,9 +51,6 @@ class Chat(object):
         #chat session.
         self.message_event = Event()
         
-        #chat session Message objects
-        self.messages = []
-
         #sorted list of Message object timestamps
         #to allow for binary search by message
         #timestamp. Note that the message indexes in
@@ -54,7 +61,7 @@ class Chat(object):
         #dict of {message_id: message} to prevent
         #the addition of duplicate messages.
         self.message_history = {}
-
+    
     def _store_message(self, message):
         """Helper method to store message in session.
 
@@ -65,7 +72,7 @@ class Chat(object):
             index = bisect.bisect(self.message_timestamps, message.header.timestamp)
             self.message_history[message.header.id] = message
             self.message_timestamps.insert(index, message.header.timestamp)
-            self.messages.insert(index, message)
+            self.state.messages.insert(index, message)
     
     def _filter_messages(self, messages, user_id=None):
         """Helper method to filter messages.
@@ -83,7 +90,7 @@ class Chat(object):
                     continue
             result.append(message)
         return result
-
+    
     @property
     def loaded(self):
         """Check if chat_model is loaded from database.
@@ -94,41 +101,43 @@ class Chat(object):
         return self.loaded_event.is_set()
 
     @property
-    def active(self):
-        """Check if chat is active.
-
-        Returns True if chat is currently
-        taking place and not yet completed, False
-        otherwise.
-        """
-        result = False
-        if self.start and not self.end:
-            result = True
+    def start(self):
+        if self.state.startTimestamp == 0: 
+            result = None
+        else:            
+            result = tz.timestamp_to_utc(self.state.startTimestamp)
         return result
-
+    
+    @property
+    def end(self):
+        if self.state.endTimestamp == 0: 
+            result = None
+        else:            
+            result = tz.timestamp_to_utc(self.state.endTimestamp)
+        return result
+    
     @property
     def started(self):
-        """Check if chat is started.
-        
-        Returns:
-            True if chat is started, False otherwise.
-        """
-        if self.start:
-            return True
-        else:
-            return False
+        return self.state.startTimestamp > 0
+
+    @property
+    def ended(self):
+        return self.state.endTimestamp > 0
 
     @property
     def completed(self):
-        """Check if chat is completed.
+        return self.state.endTimestamp > 0
 
-        Returns:
-            True if chat is completed, False otherwise.
-        """
-        if self.end:
-            return True
-        else:
-            return False
+    @property
+    def expired(self):
+        result = False
+        start = self.state.startTimestamp
+        max_duration = self.state.maxDuration
+
+        if start and max_duration:
+            now = tz.timestamp()
+            result = now > start + max_duration 
+        return result    
 
     def load(self):
         """Load chat model from database.
@@ -139,27 +148,35 @@ class Chat(object):
         if not self.loaded_event.is_set():
             try:
                 session = self.service_handler.get_database_session()
-                self.chat_model = session.query(ChatModel)\
+                model = session.query(ChatModel)\
                         .filter_by(token=self.token)\
                         .one()
-                self.id = self.chat_model.id
+                self.id = model.id
+                session.commit()
                 
-                #Do not commit the session, so that
-                #that the chat model will be properly
-                #detached when session.close() is called.
-                #This will allow us to access chat model
-                #attributes without database accesses.
-                #session.commit()
+                self.state.maxDuration = model.max_duration
+                self.state.maxParticipants = model.max_participants
 
-            except:
+                if model.end:
+                    self.state.status = ChatStatus.ENDED
+                    self.state.startTimestamp = tz.utc_to_timestamp(model.start)
+                    self.state.endTimesamp = tz.utc_to_timestamp(model.end)
+                elif model.start:
+                    self.state.status = ChatStatus.STARTED
+                    self.state.startTimestamp = tz.utc_to_timestamp(model.start)
+            
+            except NoResultFound:
+                self.loaded_event.set()
+                self.loaded_event.clear()
+            except Exception as error:
+                logging.exception(error)
                 self.loaded_event.set()
                 self.loaded_event.clear()
                 raise
 
             finally:
                 session.close()
-            
-            print 'load success'
+                   
             self.loaded_event.set()
 
     def save(self):
@@ -173,12 +190,14 @@ class Chat(object):
         try:
             session = self.service_handler.get_database_session()
             session.query(ChatModel) \
+                    .filter(ChatModel.id == self.id)\
                     .update({
                         "start": self.start,
                         "end": self.end
-                    }).where(ChatModel.id == self.chat_model.id)
+                    })
             session.commit()
-        except Exception:
+        except Exception as error:
+            logging.exception(error)
             session.rollback()
             raise
         finally:
@@ -192,9 +211,7 @@ class Chat(object):
         Returns:
             True if session is loaded, False otherwise.
         """
-        print 'wait load'
         self.loaded_event.wait(timeout)
-        print 'wait load done'
         return self.loaded_event.is_set()
 
     def trigger_messages(self):
@@ -236,17 +253,17 @@ class Chat(object):
         messages = []
         if asOf is not None:
             index = bisect.bisect(self.message_timestamps, asOf)
-            messages = self.messages[index:]
+            messages = self.state.messages[index:]
             if user_id is not None:
                 messages = self._filter_messages(messages, user_id)
             if not messages and block:
                 self.message_event.wait(timeout)
                 index = bisect.bisect(self.message_timestamps, asOf)
-                messages = self.messages[index:]
+                messages = self.state.messages[index:]
                 if user_id is not None:
                     messages = self._filter_messages(messages, user_id)
         else:
-            messages = self.self.messages
+            messages = self.self.state.messages
             if user_id is not None:
                 messages = self._filter_messages(messages, user_id)
         
@@ -263,6 +280,13 @@ class Chat(object):
         """
         for message in messages:
             if message.header.id not in self.message_history:
+                #it's important that the message timestamp be set
+                #here to ensure that messages are ordered properly.
+                #if this were set in a message handler and the
+                #message handler yielded due to i/o and another
+                #message were processed we could get out of
+                #order messages.
+                message.header.timestamp = tz.timestamp()
                 self._store_message(message)
         self.trigger_messages()
 

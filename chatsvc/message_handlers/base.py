@@ -60,3 +60,16 @@ class MessageHandler(object):
             and should be propagated.
         """
         return
+
+    def handle_poll(self, request_context, chat):
+        """Handle poll for messages.
+
+        Args:
+            request_context: RequestContext object
+            chat: Chat object
+        Returns:
+            list of additional Message objects to propagate.
+            Note that messages returned will be propagated through
+            message handlers just like ordinary messages.
+        """
+        return

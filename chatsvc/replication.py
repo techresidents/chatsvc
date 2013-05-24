@@ -7,12 +7,11 @@ import gevent.coros
 import gevent.event
 import gevent.queue
 
-from trpycore.timezone import tz
 from trsvcscore.proxy.basic import BasicServiceProxyPool
 from trsvcscore.hashring.base import ServiceHashringEvent
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
-from trchatsvc.gen.ttypes import ChatSnapshot, ReplicationSnapshot
+from trchatsvc.gen.ttypes import ChatState, ChatSnapshot
 
 def node_to_string(node):
     """Helper method to convert hashring node to string.
@@ -278,8 +277,8 @@ class Replicator(object):
                 sessionId="sessionid",
                 context="")
 
-    def _build_replication_snapshot(self, chat, messages):
-        """Build ReplicationSnapshot object.
+    def _build_chat_snapshot(self, chat, messages=None):
+        """Build ChatSnapshot object for replication.
 
         Args:
             chat: Chat object
@@ -290,29 +289,26 @@ class Replicator(object):
         Returns:
             ReplicationSnapshot object
         """
-        #TODO - make this more robust
-        full_snapshot = len(chat.messages) == len(messages)
+        messages = messages or []
+        full_snapshot = len(chat.state.messages) == len(messages)
 
-        start_timestamp = 0
-        if chat.start:
-            start_timestamp = tz.utc_to_timestamp(chat.start)
-
-        end_timestamp = 0
-        if chat.end:
-            end_timestamp = tz.utc_to_timestamp(chat.end)
-
-
-        chat_snapshot = ChatSnapshot(
-                token=chat.token,
-                startTimestamp=start_timestamp,
-                endTimestamp=end_timestamp,
+        state = ChatState(
+                token=chat.state.token,
+                status=chat.state.status,
+                maxDuration=chat.state.maxDuration,
+                maxParticipants=chat.state.maxParticipants,
+                startTimestamp=chat.state.startTimestamp,
+                endTimestamp=chat.state.endTimestamp,
+                users=chat.state.users,
+                persisted=chat.state.persisted,
+                session=chat.state.session,
                 messages=messages)
 
-        replication_snapshot = ReplicationSnapshot(
+        snapshot = ChatSnapshot(
                 fullSnapshot=full_snapshot,
-                chatSnapshot=chat_snapshot)
+                state=state)
 
-        return replication_snapshot
+        return snapshot
 
     def _service_proxy_pool(self, node):
         """Get service proxy pool for the given hashring node.
@@ -561,7 +557,7 @@ class Replicator(object):
                     self.log.debug("Replicating %s message(s) to [\n%s\n]" % (len(messages), node_to_string(node)))
 
                 context = self._build_request_context()
-                snapshot = self._build_replication_snapshot(chat, messages)
+                snapshot = self._build_chat_snapshot(chat, messages)
                 proxy.replicate(context, snapshot)
 
                 #Signal to the result that our replication is completed.
@@ -686,6 +682,7 @@ class GreenletPoolReplicator(Replicator):
         while self.running:
             try:
                 item = self.queue.get()
+
                 if item is self.STOP_ITEM:
                     break
                 
@@ -747,15 +744,16 @@ class GreenletPoolReplicator(Replicator):
         Returns:
             ReplicationAsyncResult object
         """
-        N = N or self.N
-        W = W or self.W
+        if N is None or N == -1:
+            N = self.N
+        if W is None or W == -1:
+            W = self.W
         
         #Create the async replication result to track replication
         result = ReplicationAsyncResult(N, W)
 
         #Signal to the result that 1 copy of the data exists (ours).
         result.set(None)
-
         if N > 1:
             item = self.ReplicationItem(
                     chat=chat,
@@ -764,7 +762,7 @@ class GreenletPoolReplicator(Replicator):
                     W=W,
                     nodes=nodes,
                     result=result)
-
+            
             self.queue.put(item)
 
         return result
@@ -802,7 +800,7 @@ class GreenletPoolReplicator(Replicator):
                 #to all nodes in replication_nodes.
                 self.replicate(
                         chat=chat,
-                        messages=chat.messages,
+                        messages=chat.state.messages,
                         N=len(replication_nodes)+1,
                         W=len(replication_nodes)+1,
                         nodes=replication_nodes)

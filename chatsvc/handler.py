@@ -4,7 +4,6 @@ import gevent.queue
 
 from tridlcore.gen.ttypes import RequestContext
 from trpycore.greenlet.util import join
-from trpycore.timezone import tz
 from trpycore.zookeeper_gevent.util import expire_zookeeper_client_session
 from trsvcscore.proxy.basic import BasicServiceProxy
 from trsvcscore.service_gevent.handler.service import GServiceHandler
@@ -272,9 +271,23 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         
         try:
             chat = self.chat_manager.get(chatToken)
+            if chat.expired:
+                raise InvalidChatException()
+
+            #Reading messages may generate messages.
+            #We use reads to ensure proper user/chat state.
+            #For instance, if user has not polled for messages
+            #within a threshold we change their status to UNAVAILABLE.
+            additional_messages = self.message_handler_manager.handle_poll(
+                    requestContext, chat)
+            for message in additional_messages:
+                self.sendMessage(requestContext, message,
+                        settings.REPLICATION_N, settings.REPLICATION_W)
+            
+            #read messages
             messages = chat.get_messages(asOf, block, timeout, requestContext.userId)
             return messages
-        except KeyError:
+        except (KeyError, InvalidChatException):
             raise InvalidChatException("invalid chat token: %s" % chatToken)
         except Exception as error:
             self.log.exception(error)
@@ -307,6 +320,9 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
 
         try:
             chat = self.chat_manager.get(message.header.chatToken)
+            if chat.expired:
+                raise InvalidChatException()
+            
             additional_messages = self.message_handler_manager.handle(
                     requestContext,
                     chat,
@@ -327,7 +343,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             #return updated message
             return message
         
-        except KeyError:
+        except (KeyError, InvalidChatException):
             raise InvalidChatException("invalid chat token: %s" %
                     message.header.chatToken)
         except MessageHandlerException as error:
@@ -357,7 +373,6 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             UnavailableException if no nodes are available.
         """
         chat_token = params.get("chat_token")
-        print chat_token
         primary_node = self._primary_node(chat_token)
         if primary_node is None:
             raise UnavailableException("no nodes available")
@@ -377,26 +392,23 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             self.log.exception(error)
             raise UnavailableException(str(error))
 
-    def replicate(self, requestContext, replicationSnapshot):
+    def replicate(self, requestContext, chatSnapshot):
         """Store a replication snapshot from another node.
 
         Args:
             requestContext: RequestContext object
             replicationSnapshot: ReplicationSnapshot object
         """
-        chat_snapshot = replicationSnapshot.chatSnapshot
-        chat = self.chat_manager.get(chat_snapshot.token)
-
-        #update start timestamp
-        if chat_snapshot.startTimestamp > 0:
-            chat.start = tz.timestamp_to_utc(chat_snapshot.startTimestamp)
-        
-        #update end timestamp
-        if chat_snapshot.endTimestamp > 0:
-            chat.end = tz.timestamp_to_utc(chat_snapshot.endTimestamp)
-        
-        #store replicated messages.
-        chat.store_replicated_messages(chat_snapshot.messages)
+        chat = self.chat_manager.get(chatSnapshot.state.token)
+        chat.state.status = chatSnapshot.state.status
+        chat.state.maxDuration = chatSnapshot.state.maxDuration
+        chat.state.maxParticipants = chatSnapshot.state.maxParticipants
+        chat.state.startTimestamp = chatSnapshot.state.startTimestamp
+        chat.state.endTimestamp = chatSnapshot.state.endTimestamp
+        chat.state.users = chatSnapshot.state.users
+        chat.state.persisted = chatSnapshot.state.persisted
+        chat.state.session = chatSnapshot.state.session
+        chat.store_replicated_messages(chatSnapshot.state.messages)
 
     def expireZookeeperSession(self, requestContext, timeout):
         result = False
@@ -427,8 +439,11 @@ class ChatMongrel2Handler(GMongrel2Handler):
 
     def handle_twilio_request(self, request):
         request_context = RequestContext()
+        params = request.params()
         print request.req.path
-        print request.params()
+        print params
+        if params.get("chat_token") is None:
+            return self.Response()
         
         twiml = self.service_handler.twilioRequest(
                 request_context,

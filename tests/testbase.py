@@ -27,7 +27,7 @@ from trsvcscore.service_gevent.default import GDefaultService
 from trsvcscore.service_gevent.server.default import GThriftServer
 from trchatsvc.gen import TChatService
 from trchatsvc.gen.ttypes import MessageHeader, MessageType, Message, \
-        UserStateMessage, UserState, MessageRoute, MessageRouteType
+        UserStatusMessage, UserStatus, MessageRoute, MessageRouteType
 
 from handler import ChatServiceHandler
 
@@ -134,9 +134,9 @@ def create_chat(session, token):
     session.commit()
     return chat
 
-def build_user_state_message(token, state=UserState.AVAILABLE, userId=1):
+def build_user_status_message(token, status=UserStatus.AVAILABLE, userId=1):
     header = MessageHeader(
-            type=MessageType.USER_STATE, 
+            type=MessageType.USER_STATUS, 
             chatToken=token,
             userId=1,
             timestamp=tz.timestamp(),
@@ -145,7 +145,7 @@ def build_user_state_message(token, state=UserState.AVAILABLE, userId=1):
 
     message = Message(
             header=header,
-            userStateMessage=UserStateMessage(userId=userId, state=state)
+            userStatusMessage=UserStatusMessage(userId=userId, status=status)
             )
 
     return message
