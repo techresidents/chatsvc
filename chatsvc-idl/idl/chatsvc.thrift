@@ -46,7 +46,8 @@ struct MessageHeader {
     3: string chatToken,
     4: i32 userId,
     5: double timestamp,
-    6: MessageRoute route
+    6: double skew,
+    7: MessageRoute route
 }
 
 /* User Status */
@@ -77,7 +78,6 @@ struct ChatStatusMessage {
     1: i32 userId,
     2: ChatStatus status
 }
-
 
 struct Message {
     1: MessageHeader header,

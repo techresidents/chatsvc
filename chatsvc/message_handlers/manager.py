@@ -79,13 +79,20 @@ class MessageHandlerManager(object):
             chat: Chat object
             message: Message object
         """
+        #give messages a working header timestamp even
+        #thoough it will be updated immediately before message
+        #is sent out. If user provided a timestamp use it to calculate
+        #the skew between the client and server clocks.
+        now = tz.timestamp()
+        if message.header.timestamp is None:
+            message.header.skew = 0
+        else:
+            message.header.skew = message.header.timestamp - now
+        message.header.timestamp = now
+
         if message.header.id is None:
             message.header.id = uuid.uuid4().hex
-        #given messages a working header timestamp even
-        #those will be updated immediately before message
-        #is sent.
-        if message.header.timestamp is None:
-            message.header.timestamp = tz.timestamp()
+
         if message.header.route is None:
             message.header.route = MessageRoute(
                     MessageRouteType.BROADCAST_ROUTE)
@@ -169,6 +176,7 @@ class MessageHandlerManager(object):
             chatToken=chat.state.token,
             type=MessageType.USER_STATUS,
             userId=0,
+            skew=0,
             route=MessageRoute(MessageRouteType.BROADCAST_ROUTE))
         user_status_message = UserStatusMessage(
             userId=user_id,
