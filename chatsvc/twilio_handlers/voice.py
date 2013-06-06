@@ -7,7 +7,7 @@ from twilio_handlers.manager import TwilioHandlerManager
 START_TEMPLATE = Template("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Please record your message at the beep.</Say>
-    <Record action="twilio_voice_end?chat_token=blahblah" method="GET" maxLength="$max_duration" />
+    <Record action="twilio_voice_end?chat_token=$chat_token&amp;user_id=$user_id" method="GET" maxLength="$max_duration" />
 </Response>
 """)
 
@@ -79,10 +79,14 @@ class VoiceHandler(TwilioHandler):
             TwilioHandlerException if the message is invalid
             and should be propagated.
         """
+        user_id = params.get("user_id")
+        call_sid = params.get("CallSid")
+        
         context = {
             "chat_token": chat.state.token,
-            "max_duration": chat.state.maxDuration,
-            "max_participants": chat.state.maxParticipants
+            "max_duration": chat.state.maxDuration + chat.expiration_threshold,
+            "max_participants": chat.state.maxParticipants,
+            "user_id": user_id
         }
 
         twilio_data = chat.state.session.get("twilio_data")
@@ -92,15 +96,17 @@ class VoiceHandler(TwilioHandler):
             twilio_data = {
                 "users": {}
             }
-        
-        user_id = params.get("user_id")
-        call_sid = params.get("CallSid")
 
-        #add call sid in chat state and replicate state to
+        #add call to chat state and replicate state to
         #other chatsvc nodes
-        twilio_data["users"][user_id] = {
-            "call_sid": call_sid
+        if user_id not in twilio_data["users"]:
+            twilio_data["users"][user_id] = {
+                    "calls": {}
+            }
+        twilio_data["users"][user_id]["calls"][call_sid] = {
+                "call_sid": call_sid
         }
+
         chat.state.session["twilio_data"] = json.dumps(twilio_data)
         self.service_handler.replicator.replicate(chat, [])
         

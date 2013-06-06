@@ -38,8 +38,7 @@ class GarbageCollector(object):
 
     def _gc_chat(self, chat):
         if chat.completed or chat.expired:
-            #TODO
-            if True or chat.persisted:
+            if chat.state.persisted:
                 self.log.info("garbage collecting chat (id=%s)" \
                     % chat.id)
                 self.chat_manager.remove(chat.token)

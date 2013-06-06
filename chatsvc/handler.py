@@ -17,6 +17,7 @@ import settings
 from chat import ChatManager
 from message_handlers.base import MessageHandlerException
 from message_handlers.manager import MessageHandlerManager
+from persistence import GreenletPoolPersister, PersistEvent
 from twilio_handlers.base import TwilioHandlerException
 from twilio_handlers.manager import TwilioHandlerManager
 from replication import ReplicationException, GreenletPoolReplicator
@@ -51,6 +52,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         self.server_endpoint = None
         self.hashring = None
         self.replicator = None
+        self.persister = None
         self.garbage_collector = None
         
     def _deferred_init(self):
@@ -79,6 +81,14 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                     W=settings.REPLICATION_W,
                     max_connections_per_service=settings.REPLICATION_MAX_CONNECTIONS_PER_SERVICE,
                     allow_same_host_replications=settings.REPLICATION_ALLOW_SAME_HOST)
+
+            self.persister = GreenletPoolPersister(
+                    service=self.service,
+                    hashring=self.hashring,
+                    chat_manager=self.chat_manager,
+                    database_session_factory=self.get_database_session,
+                    size=4)
+            self.persister.add_observer(self._persist_observer)
             
             self.garbage_collector = GarbageCollector(
                     service=self.service,
@@ -148,6 +158,20 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             result.append(hashring_node)
         return result
 
+    def _persist_observer(self, event):
+        """Perister observer method.
+
+        Args:
+            event: PersistEvent object
+        """
+        #When a chat session is successfuly persisted, perform
+        #one final replication so that other nodes become aware
+        #that the session has been persisted.
+        if event.event_type == PersistEvent.SESSION_PERSISTED_EVENT:
+            self.log.info("chat session (id=%s) successfully persisted" \
+                    % event.chat.id)
+            self.replicator.replicate(event.chat, [])
+
     def _gc_observer(self, event):
         """GarbageCollector observer method.
 
@@ -157,13 +181,14 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         if event.event_type == GarbageCollectionEvent.ZOMBIE_SESSION_EVENT:
             primary_node = self._primary_node(event.chat.token)
             if not self._is_remote_node(primary_node):
-                pass
+                self.persister.persist(event.chat, [], zombie=True)
 
     def start(self):
         """Start handler."""
         self._deferred_init()
 
         super(ChatServiceHandler, self).start()
+        self.persister.start()
         self.replicator.start()
         self.hashring.start()
         self.garbage_collector.start()
@@ -178,6 +203,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         self.hashring.stop()
         self.hashring.join()
         self.replicator.stop()
+        self.persister.stop()
 
         super(ChatServiceHandler, self).stop()
 
@@ -340,6 +366,12 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             async_result = self.replicator.replicate(chat, messages, N, W)
             async_result.get(block=True, timeout=settings.REPLICATION_TIMEOUT)
 
+            #persist messages
+            #Note that currently persister does not store messages
+            #but will take persist actions when a ChatStatus message
+            #which ends the chat arrives.
+            self.persister.persist(chat, messages)
+
             #return updated message
             return message
         
@@ -440,8 +472,10 @@ class ChatMongrel2Handler(GMongrel2Handler):
     def handle_twilio_request(self, request):
         request_context = RequestContext()
         params = request.params()
-        print request.req.path
-        print params
+
+        self.log.info(request.req.path)
+        self.log.info(request.params())
+        
         if params.get("chat_token") is None:
             return self.Response()
         
