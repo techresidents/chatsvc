@@ -61,6 +61,11 @@ class Chat(object):
         #dict of {message_id: message} to prevent
         #the addition of duplicate messages.
         self.message_history = {}
+        
+        #Additional number of seconds beyond max_duration
+        #which a chat is allowed to proceed before it's
+        #considered expired and inaccessible.
+        self.expiration_threshold = 360
     
     def _store_message(self, message):
         """Helper method to store message in session.
@@ -136,7 +141,7 @@ class Chat(object):
 
         if start and max_duration:
             now = tz.timestamp()
-            result = now > start + max_duration 
+            result = now > start + max_duration + self.expiration_threshold
         return result    
 
     def load(self):

@@ -20,7 +20,7 @@ INSTANCE = int(os.getenv("SERVICE_INSTANCE", 0))
 SERVICE = "chatsvc"
 SERVICE_PID_FILE = "%s.%s-%s.pid" % (SERVICE, ENV, INSTANCE)
 #SERVICE_HOSTNAME = socket.gethostname()
-SERVICE_HOSTNAME = "localhost"
+SERVICE_HOSTNAME = socket.gethostbyname(socket.gethostname())
 SERVICE_FQDN = socket.gethostname()
 
 #Server settings
