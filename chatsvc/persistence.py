@@ -24,7 +24,7 @@ class PersistAsyncResult(gevent.event.AsyncResult):
 class PersistEvent(object):
     """Persist event."""
 
-    SESSION_PERSISTED_EVENT = "SESSION_PERSISTED_EVENT"
+    CHAT_PERSISTED_EVENT = "CHAT_PERSISTED_EVENT"
 
     def __init__(self, event_type, chat):
         self.event_type = event_type
@@ -300,7 +300,7 @@ class GreenletPoolPersister(Persister):
             
             if chat_persisted:
                 event = PersistEvent(
-                        PersistEvent.SESSION_PERSISTED_EVENT,
+                        PersistEvent.CHAT_PERSISTED_EVENT,
                         chat)
                 self._notify_observers(event)
             

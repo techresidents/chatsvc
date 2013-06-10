@@ -3,7 +3,7 @@ import logging
 import gevent
 
 class GarbageCollectionEvent(object):
-    ZOMBIE_SESSION_EVENT = "ZOMBIE_SESSION_EVENT"
+    ZOMBIE_CHAT_EVENT = "ZOMBIE_CHAT_EVENT"
 
     def __init__(self, event_type, chat):
         self.event_type = event_type
@@ -46,7 +46,7 @@ class GarbageCollector(object):
                 self.log.info("zombie chat dectected (id=%s)" \
                         % chat.id)
                 event = GarbageCollectionEvent(
-                        GarbageCollectionEvent.ZOMBIE_SESSION_EVENT,
+                        GarbageCollectionEvent.ZOMBIE_CHAT_EVENT,
                         chat)
                 self._notify_observers(event)
   

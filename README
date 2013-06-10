@@ -14,3 +14,13 @@ Development environment:
     OR (alternative to bootstrap.py)
 
     $ CFLAGS=-I/opt/local/include pip install -r requirements/requirements.txt
+
+
+3) Running chatsvc w/ Twilio
+
+    #establsh tunnel to localhost 6767 using localtunnel
+    $ lt --port 6767
+    your url is: http://kyqn.localtunnel.me
+
+    #configure Twilio to use tunnel
+    $ ./scripts/twilio_tunnel http://kyqn.localtunnel.me

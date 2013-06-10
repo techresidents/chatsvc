@@ -167,7 +167,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         #When a chat session is successfuly persisted, perform
         #one final replication so that other nodes become aware
         #that the session has been persisted.
-        if event.event_type == PersistEvent.SESSION_PERSISTED_EVENT:
+        if event.event_type == PersistEvent.CHAT_PERSISTED_EVENT:
             self.log.info("chat session (id=%s) successfully persisted" \
                     % event.chat.id)
             self.replicator.replicate(event.chat, [])
@@ -178,7 +178,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         Args:
             event: GarbageCollectionEvent object
         """
-        if event.event_type == GarbageCollectionEvent.ZOMBIE_SESSION_EVENT:
+        if event.event_type == GarbageCollectionEvent.ZOMBIE_CHAT_EVENT:
             primary_node = self._primary_node(event.chat.token)
             if not self._is_remote_node(primary_node):
                 self.persister.persist(event.chat, [], zombie=True)
