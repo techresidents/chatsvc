@@ -7,11 +7,11 @@ ENV = os.getenv("SERVICE_ENV", "default")
 #Service Settings
 SERVICE = "chatsvc"
 SERVICE_PID_FILE = "%s.%s.pid" % (SERVICE, ENV)
-SERVICE_HOSTNAME = socket.gethostname()
+SERVICE_HOSTNAME = socket.gethostbyname(socket.gethostname())
 SERVICE_FQDN = socket.gethostname()
 
 #Thrift Server settings
-THRIFT_SERVER_ADDRESS = socket.gethostname()
+THRIFT_SERVER_ADDRESS = socket.gethostbyname(socket.gethostname())
 THRIFT_SERVER_INTERFACE = "0.0.0.0"
 THRIFT_SERVER_PORT = 9090
 

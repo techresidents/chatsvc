@@ -1,37 +1,14 @@
 import abc
+import json
 import logging
 
 import gevent.event
 import gevent.queue
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import desc
 
-from trchatsvc.gen.ttypes import MessageType, MarkerType
-from trpycore.thrift.serialization import serialize
-from trpycore.timezone import tz
+from trchatsvc.gen.ttypes import MessageType, ChatStatus
 from trsvcscore.hashring.base import ServiceHashringEvent
-from trsvcscore.db.models import ChatMessage as ChatMessageModel, ChatPersistJob
-
-#ChatMessage database id's.
-#TODO replace hard coded id's with dynamic enum.
-MESSAGE_TYPE_IDS= {
-    "MARKER_CREATE": 1,
-    "MINUTE_CREATE": 2,
-    "MINUTE_UPDATE": 3,
-    "TAG_CREATE": 4,
-    "TAG_DELETE": 5,
-    "WHITEBOARD_CREATE": 6,
-    "WHITEBOARD_DELETE": 7,
-    "WHITEBOARD_CREATE_PATH": 8,
-    "WHITEBOARD_DELETE_PATH": 9,
-}
-
-#ChatMessageFormatType database id's.
-#TODO replace hard coded id's with dynamic enum.
-MESSAGE_FORMAT_TYPE_IDS = {
-    "JSON": 1,
-    "THRIFT_BINARY_B64": 2,
-}
+from trsvcscore.db.models import ChatArchiveJob
 
 class PersistException(Exception):
     """Persist exception class."""
@@ -47,11 +24,11 @@ class PersistAsyncResult(gevent.event.AsyncResult):
 class PersistEvent(object):
     """Persist event."""
 
-    SESSION_PERSISTED_EVENT = "SESSION_PERSISTED_EVENT"
+    CHAT_PERSISTED_EVENT = "CHAT_PERSISTED_EVENT"
 
-    def __init__(self, event_type, chat_session):
+    def __init__(self, event_type, chat):
         self.event_type = event_type
-        self.chat_session = chat_session
+        self.chat = chat
 
 class Persister(object):
     """Persister abstract base class.
@@ -64,20 +41,20 @@ class Persister(object):
             self,
             service,
             hashring,
-            chat_sessions_manager,
+            chat_manager,
             database_session_factory):
         """Persister constructor.
 
         Args:
             service: ChatService object
             hashring: ServiceHashring object
-            chat_sessions_manager: ChatSessionsManager object
+            chat_manager: ChatManager object
             database_session_factory: sqlalchemy database session
             factory method.
         """
         self.service = service
         self.hashring = hashring
-        self.chat_sessions_manager = chat_sessions_manager
+        self.chat_manager = chat_manager
         self.database_session_factory = database_session_factory
 
         #add hashring observer
@@ -107,19 +84,19 @@ class Persister(object):
         return
     
     @abc.abstractmethod
-    def persist(self, chat_session, messages=None, all=False, zombie=False):
-        """Persist messages for the given chat session.
+    def persist(self, chat, messages=None, all=False, zombie=False):
+        """Persist messages for the given chat.
 
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             messages: optional list of Message objects to persist
             all: optional flag which can be used as an alternative
                 to passing in 'messages', which when True indicates
-                that all messages in the chat_session which need
+                that all messages in the chat which need
                 persisting, should be persisted.
             zombie: optional flag which indicates that the given
-                chat_session is a zombie (expired but not completed)
-                and that a ChatPersistJob should be created.
+                chat is a zombie (expired but not completed)
+                and that chat should be persisted.
         
         Returns:
             PersistAsyncResult object.
@@ -154,50 +131,12 @@ class Persister(object):
         """
         return self.database_session_factory()
 
-    def _get_unpersisted_messages(self, chat_session):
-        """Get all unpersisted messages for the given chat_session.
-
-        This method determines which messages exist in the
-        chat session object, but not in the database.
-
-        Args:
-            chat_session: ChatSession object
-        Returns:
-            list of Message objects needing persistence.
-        """
-        result = []
-
-        try:
-            session = self._get_database_session()
-            persisted_messages = session.query(ChatMessageModel)\
-                    .filter_by(chat_session_id=chat_session.id)\
-                    .order_by(desc(ChatMessageModel.timestamp))\
-                    .with_entities(ChatMessageModel.message_id)\
-                    .all()
-            
-            persisted = {}
-            for message in persisted_messages:
-                persisted[message.message_id] = True
-
-            for message in chat_session.messages:
-                if message.header.id not in persisted:
-                    result.append(message)
-
-            session.commit()
-
-        except Exception:
-            result = chat_session.messages
-        finally:
-            session.close()
-        
-        return result
-
     def _hashring_observer(self, hashring, event):
         """Observer method which will be invoked upon hashring changes.
         
-        This method loops through all chat session, upon a change
+        This method loops through all chat, upon a change
         to the hashring, and initiates a full persist for chat
-        sessions which it is taking eover. This ensures that
+        which it is taking eover. This ensures that
         messages which may have been in the memory of the previously
         responsible service, but not yet persisted, will be 
         persisted.
@@ -209,16 +148,16 @@ class Persister(object):
         if event.event_type == ServiceHashringEvent.CHANGED_EVENT:
             service_info = self.service.info()
 
-            #Loop through all of the chat sessions and initiate 
-            #a full persist for all chat sessions which we are
+            #Loop through all of the chat and initiate 
+            #a full persist for all chat which we are
             #taking over, since they may have add messages
             #in memory which were not permitted.
-            for chat_session_token, chat_session in self.chat_sessions_manager.all().items():
+            for chat_token, chat in self.chat_manager.all().items():
                 previous_preference_list = self.hashring.preference_list(
-                        chat_session_token,
+                        chat_token,
                         event.previous_hashring)
                 current_preference_list = self.hashring.preference_list(
-                        chat_session_token,
+                        chat_token,
                         event.current_hashring)
 
                 if previous_preference_list and current_preference_list:
@@ -226,7 +165,7 @@ class Persister(object):
                     current_primary = current_preference_list[0]
                     if current_primary.service_info.key == service_info.key and \
                        previous_primary.service_info.key != service_info.key:
-                           self.persist(chat_session, None, all=True)
+                           self.persist(chat, None, all=True)
 
 
 class GreenletPoolPersister(Persister):
@@ -239,23 +178,21 @@ class GreenletPoolPersister(Persister):
 
         Represents persist work which needs to be done.
         """
-        def __init__(self, chat_session, messages, all, zombie, result):
+        def __init__(self, chat, messages, all, zombie, result):
             """PersistItem constructor.
 
             Args:
-                chat_session: ChatSession object
+                chat: Chat object
                 messages: optional list of Message objects to persist
                 all: flag which can be used as an alternative
                     to passing in 'messages', which when True indicates
-                    that all messages in the chat_session which need
+                    that all messages in the chat which need
                     persisting, should be persisted.
                 zombie: flag which indicates that the given
-                    chat_session is a zombie (expired but not completed)
-                    and that a ChatPersistJob should be created.
-                    chat_session: ChatSession object
-                    messages: list of Message objects needing persisting
+                    chat is a zombie (expired but not completed)
+                    and that chat should be persisted.
             """
-            self.chat_session = chat_session
+            self.chat = chat
             self.messages = messages
             self.all = all
             self.zombie = zombie
@@ -265,7 +202,7 @@ class GreenletPoolPersister(Persister):
         self,
         service,
         hashring,
-        chat_sessions_manager,
+        chat_manager,
         database_session_factory,
         size,
         max_queue_size=100):
@@ -274,7 +211,7 @@ class GreenletPoolPersister(Persister):
         Args:
             service: ChatService object
             hashring: ServiceHashring object
-            chat_sessions_manager: ChatSessionsManager object
+            chat_manager: ChatManager object
             database_session_factory: sqlalchemy database session
                 factory method.
             size: number of greenlets in pool
@@ -285,7 +222,7 @@ class GreenletPoolPersister(Persister):
         super(GreenletPoolPersister, self).__init__(
             service,
             hashring,
-            chat_sessions_manager,
+            chat_manager,
             database_session_factory)
         self.size = size
         self.queue = gevent.queue.Queue(max_queue_size)
@@ -307,16 +244,16 @@ class GreenletPoolPersister(Persister):
                 self.log.error("persist observer exception.")
                 self.log.exception(error)
     
-    def _is_chat_ended_marker(self, message):
-        """Check if message is ENDED_MARKER message.
+    def _is_chat_ended_message(self, message):
+        """Check if message indicates that chat has ended.
 
         Args:
             message: Message object
         """
         result = False
-        if message.header.type == MessageType.MARKER_CREATE:
-            marker = message.markerCreateMessage.marker
-            if marker.type == MarkerType.ENDED_MARKER:
+        if message.header.type == MessageType.CHAT_STATUS:
+            msg = message.chatStatusMessage
+            if msg.status == ChatStatus.ENDED:
                 result = True
         return result
     
@@ -334,41 +271,37 @@ class GreenletPoolPersister(Persister):
             Exception (SQLAlchemy)
         """
         try:
-            chat_session_persisted = False
-            chat_session = item.chat_session
+            chat_persisted = False
+            chat = item.chat
             session = self._get_database_session()
 
             if item.all:
-                messages = self._get_unpersisted_messages(chat_session)
+                #TODO fix this if we persist messages in the future
+                #messages = self._get_unpersisted_messages(chat)
+                pass
             else:
                 messages = item.messages or []
 
             for message in messages:
-                model = ChatMessageModel(
-                        message_id=message.header.id,
-                        chat_session_id=chat_session.id,
-                        type_id=MESSAGE_TYPE_IDS[MessageType._VALUES_TO_NAMES[message.header.type]],
-                        format_type_id=MESSAGE_FORMAT_TYPE_IDS["THRIFT_BINARY_B64"],
-                        timestamp=message.header.timestamp,
-                        time=tz.timestamp_to_utc(message.header.timestamp),
-                        data=serialize(message))
-                session.add(model)
+                #no longer persisting chat messages.
+                #this may change in the future.
 
-                if self._is_chat_ended_marker(message) and not chat_session.persisted:
-                    self._create_persist_job(chat_session, session)
-                    chat_session_persisted = True
+                if self._is_chat_ended_message(message) and\
+                   not chat.state.persisted:
+                    self._persist_ended_chat(chat, session)
+                    chat_persisted = True
             
-            if item.zombie and not chat_session.persisted:
-                self._create_persist_job(chat_session, session)
-                chat_session_persisted = True
+            if item.zombie and not chat.state.persisted:
+                self._persist_ended_chat(chat, session)
+                chat_persisted = True
 
             session.commit()
             item.result.set(None)
             
-            if chat_session_persisted:
+            if chat_persisted:
                 event = PersistEvent(
-                        PersistEvent.SESSION_PERSISTED_EVENT,
-                        chat_session)
+                        PersistEvent.CHAT_PERSISTED_EVENT,
+                        chat)
                 self._notify_observers(event)
             
             if self.log.isEnabledFor(logging.DEBUG):
@@ -380,17 +313,29 @@ class GreenletPoolPersister(Persister):
         finally:
             session.close()
     
-    def _create_persist_job(self, chat_session, session):
-        """Create a ChatPersistJob in the database.
+    def _persist_ended_chat(self, chat, session):
+        """Finish peristing ended chat.
 
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             session: SQLAlchemy Sesison object
         """
-        chat_session.persisted = True
-        job = ChatPersistJob(
-               chat_session_id=chat_session.id,
-               created=func.current_timestamp())
+        chat.state.persisted = True
+        
+        #convert chat session to pure json
+        data = dict(chat.state.session);
+        if "twilio_data" in data:
+            data["twilio_data"] = json.loads(data["twilio_data"])
+        data = json.dumps(data)
+
+        #create chat archive job
+        job = ChatArchiveJob(
+               chat_id=chat.id,
+               created=func.current_timestamp(),
+               not_before=func.current_timestamp(),
+               data=data,
+               retries_remaining=4)
+
         session.add(job)
 
     def add_observer(self, observer):
@@ -455,25 +400,25 @@ class GreenletPoolPersister(Persister):
         """
         gevent.joinall(self.workers, timeout)
 
-    def persist(self, chat_session, messages, all=False, zombie=False):
-        """Persist messages for the given chat session.
+    def persist(self, chat, messages, all=False, zombie=False):
+        """Persist messages for the given chat.
 
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             messages: optional list of Message objects to persist
             all: optional flag which can be used as an alternative
                 to passing in 'messages', which when True indicates
-                that all messages in the chat_session which need
+                that all messages in the chat which need
                 persisting, should be persisted.
             zombie: optional flag which indicates that the given
-                chat_session is a zombie (expired but not completed)
+                chat is a zombie (expired but not completed)
                 and that a ChatPersistJob should be created.
         
         Returns:
             PersistAsyncResult object.
         """
         item = self.PersistItem(
-                chat_session=chat_session,
+                chat=chat,
                 messages=messages,
                 all=all,
                 zombie=zombie,

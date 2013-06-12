@@ -1,6 +1,9 @@
 import logging
+import uuid
 
-from trchatsvc.gen.ttypes import MessageType
+from trpycore.timezone import tz
+from trchatsvc.gen.ttypes import MessageType, MessageRoute, MessageRouteType, \
+        UserStatus, UserStatusMessage, Message, MessageHeader
 from message_handlers.base import MessageHandlerException
 
 class MessageHandlerManager(object):
@@ -68,24 +71,43 @@ class MessageHandlerManager(object):
             self.handlers[message_type] = []
         return self.handlers[message_type]
 
-    def _default_handle(self, request_context, chat_session, message):
+    def _default_handle(self, request_context, chat, message):
         """Default handle method which should be applied to all messages.
 
         Args:
             request_context: RequestContext object
-            chat_session: ChatSession object
+            chat: Chat object
             message: Message object
         """
-        if message.header.type != MessageType.MARKER_CREATE:
-            if not chat_session.active:
-                raise MessageHandlerException("chat session closed.")
+        #give messages a working header timestamp even
+        #thoough it will be updated immediately before message
+        #is sent out. If user provided a timestamp use it to calculate
+        #the skew between the client and server clocks.
+        now = tz.timestamp()
+        if message.header.timestamp is None:
+            message.header.skew = 0
+        else:
+            message.header.skew = message.header.timestamp - now
+        message.header.timestamp = now
 
-    def handle(self, request_context, chat_session, message):
+        if message.header.id is None:
+            message.header.id = uuid.uuid4().hex
+
+        if message.header.route is None:
+            message.header.route = MessageRoute(
+                    MessageRouteType.BROADCAST_ROUTE)
+
+        message_types = [MessageType.USER_STATUS, MessageType.CHAT_STATUS]
+        if message.header.type not in message_types:
+            if not chat.active:
+                raise MessageHandlerException("chat is not active.")
+
+    def handle(self, request_context, chat, message):
         """Handle a message.
 
         Args:
             request_context: RequestContext object
-            chat_session: ChatSession object
+            chat: Chat object
             message: Message object
         Returns:
             list of additional Message objects to propagate.
@@ -99,14 +121,14 @@ class MessageHandlerManager(object):
         result = []
         
         try:
-            self._default_handle(request_context, chat_session, message)
+            self._default_handle(request_context, chat, message)
 
             message_type = message.header.type
             handlers = self._get_handlers(message_type)
 
             if handlers:
                 for handler in handlers:
-                    messages = handler.handle(request_context, chat_session, message)
+                    messages = handler.handle(request_context, chat, message)
                     if messages:
                         result.extend(messages)
         except MessageHandlerException:
@@ -117,3 +139,47 @@ class MessageHandlerManager(object):
             raise MessageHandlerException(str(error))
 
         return result
+
+    def handle_poll(self, request_context, chat):
+        """Handle poll for messages.
+
+        Args:
+            request_context: RequestContext object
+            chat: Chat object
+        Returns:
+            list of additional Message objects to propagate.
+            Note that messages returned will be propagated through
+            message handlers just like ordinary messages.
+        """
+        result = []
+        now = tz.timestamp()
+        
+        #update the polling user's updateTimestamp. This timestamp
+        #represents the last time the user communicated with us.
+        #If it exceeds a threshold we'll change their status to
+        #UNAVAILABLE.
+        user_state = chat.state.users.get(request_context.userId)
+        if user_state:
+            user_state.updateTimestamp = now
+
+        #find idle users and update status
+        for user_state in chat.state.users.values():
+            if user_state.status != UserStatus.UNAVAILABLE and \
+               now - user_state.updateTimestamp > 20:
+                msg = self._build_user_status_message(chat,
+                        user_state.userId, UserStatus.UNAVAILABLE)
+                result.append(msg)
+        return result
+    
+    def _build_user_status_message(self, chat, user_id, status):
+        header = MessageHeader(
+            chatToken=chat.state.token,
+            type=MessageType.USER_STATUS,
+            userId=0,
+            skew=0,
+            route=MessageRoute(MessageRouteType.BROADCAST_ROUTE))
+        user_status_message = UserStatusMessage(
+            userId=user_id,
+            status=status)
+        message = Message(header=header, userStatusMessage=user_status_message)
+        return message

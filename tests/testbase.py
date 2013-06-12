@@ -1,4 +1,3 @@
-import datetime
 import logging
 import unittest
 import os
@@ -22,14 +21,15 @@ sys.path.insert(0, SERVICE_ROOT)
 from tridlcore.gen.ttypes import RequestContext
 from trpycore.timezone import tz
 from trpycore.zookeeper_gevent.client import GZookeeperClient
-from trsvcscore.db.models import Chat, ChatSession, ChatMessage
+from trsvcscore.db.models import Chat
 from trsvcscore.proxy.zoo import ZookeeperServiceProxy
 from trsvcscore.service_gevent.default import GDefaultService
 from trsvcscore.service_gevent.server.default import GThriftServer
 from trchatsvc.gen import TChatService
+from trchatsvc.gen.ttypes import MessageHeader, MessageType, Message, \
+        UserStatusMessage, UserStatus, MessageRoute, MessageRouteType
 
 from handler import ChatServiceHandler
-from message import MessageFactory
 
 class ChatService(GDefaultService):
     def __init__(self, hostname, port):
@@ -117,52 +117,35 @@ class DistributedTestCase(unittest.TestCase):
 
 
 #Helper methods
-def delete_chat_session(session, chat_session):
-    session.query(ChatMessage)\
-            .filter_by(chat_session=chat_session)\
-            .delete()
-
-    chat = chat_session.chat
-    session.delete(chat_session)
+def delete_chat(session, chat):
     session.delete(chat)
     session.commit()
 
-def create_chat_session(session, token):
-    chat_session = session.query(ChatSession)\
+def create_chat(session, token):
+    chat = session.query(Chat)\
             .filter_by(token=token)\
             .first()
 
-    if chat_session is not None:
-        delete_chat_session(session, chat_session)
+    if chat is not None:
+        delete_chat(session, chat)
     
-    chat = Chat(
-            type_id=1,
-            topic_id=1,
-            start=tz.utcnow(),
-            end=tz.utcnow()+datetime.timedelta(minutes=5))
-
-    chat_session = ChatSession(
-            chat=chat,
-            token=token,
-            participants=0)
-
-    session.add(chat_session)
+    chat = Chat(topic_id=1, max_participants=1, token=token)
+    session.add(chat)
     session.commit()
+    return chat
 
-    return chat_session
+def build_user_status_message(token, status=UserStatus.AVAILABLE, userId=1):
+    header = MessageHeader(
+            type=MessageType.USER_STATUS, 
+            chatToken=token,
+            userId=1,
+            timestamp=tz.timestamp(),
+            route=MessageRoute(MessageRouteType.BROADCAST_ROUTE)
+            )
 
+    message = Message(
+            header=header,
+            userStatusMessage=UserStatusMessage(userId=userId, status=status)
+            )
 
-def build_tag_create_message(chat_session_token, name):
-    header = {
-        "type": "TAG_CREATE",
-        "userId": 11,
-        "chatSessionToken": chat_session_token
-    }
-
-    msg = {
-        "minuteId": "1",
-        "name": name
-    }
-
-    factory = MessageFactory()
-    return factory.create(header, msg)
+    return message

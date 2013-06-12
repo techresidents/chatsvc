@@ -7,12 +7,11 @@ import gevent.coros
 import gevent.event
 import gevent.queue
 
-from trpycore.timezone import tz
 from trsvcscore.proxy.basic import BasicServiceProxyPool
 from trsvcscore.hashring.base import ServiceHashringEvent
 from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
-from trchatsvc.gen.ttypes import ChatSessionSnapshot, ReplicationSnapshot
+from trchatsvc.gen.ttypes import ChatState, ChatSnapshot
 
 def node_to_string(node):
     """Helper method to convert hashring node to string.
@@ -151,7 +150,7 @@ class Replicator(object):
             self,
             service,
             hashring,
-            chat_sessions_manager,
+            chat_manager,
             N,
             W,
             max_connections_per_service=1,
@@ -161,7 +160,7 @@ class Replicator(object):
         Args:
             service: Service object
             hashring: ServiceHashring object
-            chat_sessions_manager: ChatSessionsManager object
+            chat_manager: ChatManager object
             N: The total number of nodes to write data to,
                 including the node performing the replication.
                 For example if you need 3 copies of your data,
@@ -180,7 +179,7 @@ class Replicator(object):
         """
         self.service = service
         self.hashring = hashring
-        self.chat_sessions_manager = chat_sessions_manager
+        self.chat_manager = chat_manager
         self.N = N
         self.W = W
         self.max_connections_per_service = max_connections_per_service
@@ -200,10 +199,10 @@ class Replicator(object):
         return
     
     @abc.abstractmethod
-    def replicate(self, chat_session, messages, N=None, W=None, nodes=None):
-        """Replicate messages for the specified chat session.
+    def replicate(self, chat, messages, N=None, W=None, nodes=None):
+        """Replicate messages for the specified chat.
         
-        Replicates messages for the specified chat session. Upon success,
+        Replicates messages for the specified chat. Upon success,
         the replication will result in N total copies of the messages,
         and the returned ReplicationAsyncResult will unblock after W copies
         of the messages have been written. If nodes are provided, it
@@ -211,7 +210,7 @@ class Replicator(object):
         the hashring will be used to determine the preference list.
         
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             messages: list of chat Message objects to replicate.
             N: The total number of nodes to write messages to.
                 If not provided, self.N will be used.
@@ -237,8 +236,8 @@ class Replicator(object):
         current_hashring.
 
         Note that each service is only responsible for replicating messages
-        for chat sessions for which it is currently responsible, and,
-        also chat sessions for which it was is previously responsible.
+        for chat for which it is currently responsible, and,
+        also chat for which it was is previously responsible.
 
         Args:
             previous_hashring: List of ServiceHashringNode's representing
@@ -278,11 +277,11 @@ class Replicator(object):
                 sessionId="sessionid",
                 context="")
 
-    def _build_replication_snapshot(self, chat_session, messages):
-        """Build ReplicationSnapshot object.
+    def _build_chat_snapshot(self, chat, messages=None):
+        """Build ChatSnapshot object for replication.
 
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             messages: list of Message objects
             full_snapshot: Option flag indicating if this is a full or
                 partial snapshot.
@@ -290,40 +289,26 @@ class Replicator(object):
         Returns:
             ReplicationSnapshot object
         """
-        #TODO - make this more robust
-        full_snapshot = len(chat_session.messages) == len(messages)
+        messages = messages or []
+        full_snapshot = len(chat.state.messages) == len(messages)
 
-        connect_timestamp = 0
-        if chat_session.connect:
-            connect_timestamp = tz.utc_to_timestamp(chat_session.connect)
+        state = ChatState(
+                token=chat.state.token,
+                status=chat.state.status,
+                maxDuration=chat.state.maxDuration,
+                maxParticipants=chat.state.maxParticipants,
+                startTimestamp=chat.state.startTimestamp,
+                endTimestamp=chat.state.endTimestamp,
+                users=chat.state.users,
+                persisted=chat.state.persisted,
+                session=chat.state.session,
+                messages=messages)
 
-        publish_timestamp = 0
-        if chat_session.publish:
-            publish_timestamp = tz.utc_to_timestamp(chat_session.publish)
-        
-        start_timestamp = 0
-        if chat_session.start:
-            start_timestamp = tz.utc_to_timestamp(chat_session.start)
-
-        end_timestamp = 0
-        if chat_session.end:
-            end_timestamp = tz.utc_to_timestamp(chat_session.end)
-
-
-        chat_session_snapshot = ChatSessionSnapshot(
-                token=chat_session.token,
-                connectTimestamp=connect_timestamp,
-                publishTimestamp=publish_timestamp,
-                startTimestamp=start_timestamp,
-                endTimestamp=end_timestamp,
-                messages=messages,
-                persisted=chat_session.persisted)
-
-        replication_snapshot = ReplicationSnapshot(
+        snapshot = ChatSnapshot(
                 fullSnapshot=full_snapshot,
-                chatSessionSnapshot=chat_session_snapshot)
+                state=state)
 
-        return replication_snapshot
+        return snapshot
 
     def _service_proxy_pool(self, node):
         """Get service proxy pool for the given hashring node.
@@ -361,15 +346,15 @@ class Replicator(object):
         """
         return node.service_info.key != self.service_info.key
 
-    def _preference_list(self, chat_session_token, hashring=None):
-        """Get the replication preference list for the given chat session.
+    def _preference_list(self, chat_token, hashring=None):
+        """Get the replication preference list for the given chat.
         
         Note that if self.allow_same_host_replications is True,
         the preference list may contain service instances located
         on the same physical host.
 
         Args:
-            chat_session_token: chat session token
+            chat_token: chat token
             hashring: optional list of ServiceHashringNode's
                 to use to determine the preference list. If
                 not provided, the current hashring will be used.
@@ -383,20 +368,20 @@ class Replicator(object):
         #If self.allow_same_host_replications is set to True,
         #we should not merge nodes.
         merge_nodes = not self.allow_same_host_replications
-        return self.hashring.preference_list(chat_session_token, hashring, merge_nodes=merge_nodes)
+        return self.hashring.preference_list(chat_token, hashring, merge_nodes=merge_nodes)
 
-    def _replication_nodes(self, previous_hashring, current_hashring, chat_session_token):
+    def _replication_nodes(self, previous_hashring, current_hashring, chat_token):
         """Determine nodes needing a replication based on a hashring change.
 
         This method will determine which nodes need a replication of the specified
-        chat session based on the hashring change.
+        chat based on the hashring change.
 
         Args:
             previous_hashring: list of ServiceHashringNode objects
                 for the hashring prior to the change.
             current_hashring: list of ServiceHashringNode objects
                 for the hashring following the change.
-            chat_session_token: chat session token
+            chat_token: chat token
 
         Returns:
             list of ServiceHashringNode's needing a replication.
@@ -405,19 +390,19 @@ class Replicator(object):
 
         #Get the current and previous preference lists (only first N nodes).
         #The first N nodes in the current preference list must have a copy
-        #of all the messages in the chat session.
+        #of all the messages in the chat.
         #If a node exists in the current preference list, which did not
         #exist in the previous preference list, than the service
-        #responsible for that chat session token may have some replication
+        #responsible for that chat token may have some replication
         #work to do. The exception is if an existing service, which
         #was previously in the preference list, is occupying a new
-        #position on the hashring (closer to chat session) which
+        #position on the hashring (closer to chat) which
         #has replaced its old position.
-        current_preference_list = self._preference_list(chat_session_token, current_hashring)[:self.N]
-        previous_preference_list = self._preference_list(chat_session_token, previous_hashring)[:self.N]
+        current_preference_list = self._preference_list(chat_token, current_hashring)[:self.N]
+        previous_preference_list = self._preference_list(chat_token, previous_hashring)[:self.N]
         previous_service_keys = {n.service_info.key: True for n in previous_preference_list}
         
-        #Check if we are currently or were previously responsible for this chat session
+        #Check if we are currently or were previously responsible for this chat
         if (previous_preference_list and not self._is_remote_node(previous_preference_list[0])) or \
            (current_preference_list and not self._is_remote_node(current_preference_list[0])):
             
@@ -435,7 +420,7 @@ class Replicator(object):
                         result.append(node)
 
         if self.log.isEnabledFor(logging.DEBUG):
-            self.log.debug("Determining replication nodes for chat session: %s" % chat_session_token)
+            self.log.debug("Determining replication nodes for chat: %s" % chat_token)
             self.log.debug("Previous hashring: [\n%s\n]" % nodes_to_string(previous_hashring))
             self.log.debug("Current hashring: [\n%s\n]" % nodes_to_string(current_hashring))
             self.log.debug("Previous preference list: [\n%s\n]" % nodes_to_string(previous_preference_list))
@@ -445,7 +430,7 @@ class Replicator(object):
         return result            
     
 
-    def _coordinate_replication(self, chat_session, messages, N, W, nodes, result):
+    def _coordinate_replication(self, chat, messages, N, W, nodes, result):
         """Coordinate chat messages replication.
 
         This method will perform the replication for the given arguments.
@@ -484,7 +469,7 @@ class Replicator(object):
 
 
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             messages: List of Message objects to replicate
             N: The total number of nodes to write messages to.
             W: The total number of nodes to write messages to
@@ -496,7 +481,7 @@ class Replicator(object):
                 with replication results.
         """
         workers = []
-        preference_list = nodes or self._preference_list(chat_session.token)
+        preference_list = nodes or self._preference_list(chat.token)
         preference_queue = deque(preference_list)
         
         #Use a semaphore to limit the number of concurrent replications.
@@ -521,7 +506,7 @@ class Replicator(object):
                 #Spawn a greenlet to perform the replication
                 #if this is not us (remote node)
                 if self._is_remote_node(node):
-                    worker = gevent.spawn(self._replicate_to_node, chat_session, messages, node, result)
+                    worker = gevent.spawn(self._replicate_to_node, chat, messages, node, result)
                     worker.link(lambda greenlet: semaphore.release())
                     workers.append(worker)
                 else:
@@ -549,14 +534,14 @@ class Replicator(object):
                     error_message = "uncompleted %s" % message
                     self.log.warn(error_message)
 
-    def _replicate_to_node(self, chat_session, messages, node, result):
+    def _replicate_to_node(self, chat, messages, node, result):
         """Replicate chat messages to a single node.
 
         This method will peform a single replication to exactly one node, 
         using the service_proxy_pool for the connection.
 
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             messages: list of Message objects to replicate
             node: ServiceHashringNode to replicate messages to.
             result: ReplicationAsyncResult object to update 
@@ -572,7 +557,7 @@ class Replicator(object):
                     self.log.debug("Replicating %s message(s) to [\n%s\n]" % (len(messages), node_to_string(node)))
 
                 context = self._build_request_context()
-                snapshot = self._build_replication_snapshot(chat_session, messages)
+                snapshot = self._build_chat_snapshot(chat, messages)
                 proxy.replicate(context, snapshot)
 
                 #Signal to the result that our replication is completed.
@@ -606,9 +591,9 @@ class GreenletPoolReplicator(Replicator):
 
     class ReplicationItem:
         """Item representing a replication which needs to be performed."""
-        def __init__(self, chat_session, messages, N, W, nodes, result):
+        def __init__(self, chat, messages, N, W, nodes, result):
             """ReplicationItem constructor.
-                chat_session: ChatSession object
+                chat: Chat object
                 messages: list of Message objects needing replication
                 N: The total number of nodes to write data to,
                     including the node performing the replication.
@@ -624,7 +609,7 @@ class GreenletPoolReplicator(Replicator):
                 result: ReplicationAsyncResult object to be
                     updated with replication results.
             """
-            self.chat_session = chat_session
+            self.chat = chat
             self.messages = messages
             self.N = N
             self.W = W
@@ -635,7 +620,7 @@ class GreenletPoolReplicator(Replicator):
             self,
             service,
             hashring,
-            chat_sessions_manager,
+            chat_manager,
             N,
             W,
             size,
@@ -646,7 +631,7 @@ class GreenletPoolReplicator(Replicator):
         Args:
             service: Service object
             hashring: ServiceHashring object
-            chat_sessions_manager: ChatSessionsManager object
+            chat_manager: ChatManager object
             N: The total number of nodes to write data to,
                 including the node performing the replication.
                 For example if you need 3 copies of your data,
@@ -670,7 +655,7 @@ class GreenletPoolReplicator(Replicator):
         super(GreenletPoolReplicator, self).__init__(
                 service,
                 hashring,
-                chat_sessions_manager,
+                chat_manager,
                 N,
                 W,
                 max_connections_per_service,
@@ -697,11 +682,12 @@ class GreenletPoolReplicator(Replicator):
         while self.running:
             try:
                 item = self.queue.get()
+
                 if item is self.STOP_ITEM:
                     break
                 
                 self._coordinate_replication(
-                        chat_session=item.chat_session,
+                        chat=item.chat,
                         messages=item.messages,
                         N=item.N,
                         W=item.W,
@@ -733,10 +719,10 @@ class GreenletPoolReplicator(Replicator):
         """
         gevent.joinall(self.workers, timeout)
 
-    def replicate(self, chat_session, messages, N=None, W=None, nodes=None):
-        """Replicate messages for the specified chat session.
+    def replicate(self, chat, messages, N=None, W=None, nodes=None):
+        """Replicate messages for the specified chat.
         
-        Replicates messages for the specified chat session. Upon success,
+        Replicates messages for the specified chat. Upon success,
         the replication will result in N total copies of the messages,
         and the returned ReplicationAsyncResult will unblock after W copies
         of the messages have been written. If nodes are provided, it
@@ -744,7 +730,7 @@ class GreenletPoolReplicator(Replicator):
         the hashring will be used to determine the preference list.
         
         Args:
-            chat_session: ChatSession object
+            chat: Chat object
             messages: list of chat Message objects to replicate.
             N: The total number of nodes to write messages to.
                 If not provided, self.N will be used.
@@ -758,24 +744,25 @@ class GreenletPoolReplicator(Replicator):
         Returns:
             ReplicationAsyncResult object
         """
-        N = N or self.N
-        W = W or self.W
+        if N is None or N == -1:
+            N = self.N
+        if W is None or W == -1:
+            W = self.W
         
         #Create the async replication result to track replication
         result = ReplicationAsyncResult(N, W)
 
         #Signal to the result that 1 copy of the data exists (ours).
         result.set(None)
-
         if N > 1:
             item = self.ReplicationItem(
-                    chat_session=chat_session,
+                    chat=chat,
                     messages=messages,
                     N=N,
                     W=W,
                     nodes=nodes,
                     result=result)
-
+            
             self.queue.put(item)
 
         return result
@@ -789,8 +776,8 @@ class GreenletPoolReplicator(Replicator):
         current_hashring.
 
         Note that each service is only responsible for replicating messages
-        for chat sessions for which it is currently responsible, and,
-        also chat sessions for which it was is previously responsible.
+        for chat for which it is currently responsible, and,
+        also chat for which it was is previously responsible.
 
         Args:
             previous_hashring: List of ServiceHashringNode's representing
@@ -799,21 +786,21 @@ class GreenletPoolReplicator(Replicator):
                 the hashring following the node change.
         """
 
-        #Loop through all of the chat sessions to see if we need to
+        #Loop through all of the chat to see if we need to
         #replicate any of them to new nodes.
-        for chat_session_token, chat_session in self.chat_sessions_manager.all().items():
+        for chat_token, chat in self.chat_manager.all().items():
 
             #Get the new nodes needing the data.
-            #Note that this will only return us nodes for chat sessions
+            #Note that this will only return us nodes for chat
             #which we are currently or were previously responsible for.
-            replication_nodes = self._replication_nodes(previous_hashring, current_hashring, chat_session_token)
+            replication_nodes = self._replication_nodes(previous_hashring, current_hashring, chat_token)
             if replication_nodes:
                 #Note that we add 1 to N/W, to adjust for our copy of the data.
                 #Adding one to N/W will force the data to be replicated
                 #to all nodes in replication_nodes.
                 self.replicate(
-                        chat_session=chat_session,
-                        messages=chat_session.messages,
+                        chat=chat,
+                        messages=chat.state.messages,
                         N=len(replication_nodes)+1,
                         W=len(replication_nodes)+1,
                         nodes=replication_nodes)

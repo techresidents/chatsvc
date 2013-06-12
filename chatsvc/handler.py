@@ -1,32 +1,26 @@
-import json
 import logging
 
 import gevent.queue
 
-from trpycore import riak_gevent
+from tridlcore.gen.ttypes import RequestContext
 from trpycore.greenlet.util import join
-from trpycore.riak_common.factory import RiakClientFactory
-from trpycore.timezone import tz
 from trpycore.zookeeper_gevent.util import expire_zookeeper_client_session
-from trsvcscore.mongrel2.decorator import session_required
 from trsvcscore.proxy.basic import BasicServiceProxy
 from trsvcscore.service_gevent.handler.service import GServiceHandler
 from trsvcscore.service_gevent.handler.mongrel2 import GMongrel2Handler
-from trsvcscore.session.riak import RiakSessionStorePool
 from trsvcscore.hashring.zoo import ZookeeperServiceHashring
-from trsvcscore.http.error import HttpError
-from tridlcore.gen.ttypes import RequestContext
 from trchatsvc.gen import TChatService
-from trchatsvc.gen.ttypes import HashringNode, UnavailableException, InvalidMessageException
-
+from trchatsvc.gen.ttypes import HashringNode, UnavailableException, \
+        InvalidChatException, InvalidMessageException
 
 import settings
-from session import ChatSessionsManager
-from message import MessageFactory, MessageEncoder
+from chat import ChatManager
 from message_handlers.base import MessageHandlerException
 from message_handlers.manager import MessageHandlerManager
-from replication import ReplicationException, GreenletPoolReplicator
 from persistence import GreenletPoolPersister, PersistEvent
+from twilio_handlers.base import TwilioHandlerException
+from twilio_handlers.manager import TwilioHandlerManager
+from replication import ReplicationException, GreenletPoolReplicator
 from garbage import GarbageCollector, GarbageCollectionEvent
 
 class ChatServiceHandler(TChatService.Iface, GServiceHandler):
@@ -46,8 +40,9 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                 database_connection=settings.DATABASE_CONNECTION)
         
 
-        self.chat_sessions_manager =  ChatSessionsManager(self)
+        self.chat_manager =  ChatManager(self)
         self.message_handler_manager = MessageHandlerManager(self)
+        self.twilio_handler_manager = TwilioHandlerManager(self)
         self.deferred_init = False
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         
@@ -80,25 +75,25 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             self.replicator = GreenletPoolReplicator(
                     service=self.service,
                     hashring=self.hashring,
-                    chat_sessions_manager=self.chat_sessions_manager,
+                    chat_manager=self.chat_manager,
                     size=settings.REPLICATION_POOL_SIZE,
                     N=settings.REPLICATION_N,
                     W=settings.REPLICATION_W,
                     max_connections_per_service=settings.REPLICATION_MAX_CONNECTIONS_PER_SERVICE,
                     allow_same_host_replications=settings.REPLICATION_ALLOW_SAME_HOST)
-            
+
             self.persister = GreenletPoolPersister(
                     service=self.service,
                     hashring=self.hashring,
-                    chat_sessions_manager=self.chat_sessions_manager,
+                    chat_manager=self.chat_manager,
                     database_session_factory=self.get_database_session,
                     size=4)
             self.persister.add_observer(self._persist_observer)
-
+            
             self.garbage_collector = GarbageCollector(
                     service=self.service,
                     hashring=self.hashring,
-                    chat_sessions_manager=self.chat_sessions_manager,
+                    chat_manager=self.chat_manager,
                     interval=60,
                     throttle=0.1)
             self.garbage_collector.add_observer(self._gc_observer)
@@ -116,15 +111,15 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         """
         return node.service_info.key != self.service_info.key
 
-    def _primary_node(self, chat_session_token):
-        """Get the primary node for the chat_session_token.
+    def _primary_node(self, chat_token):
+        """Get the primary node for the chat_token.
 
         Returns:
-            ServiceHashringNode responsible for the chat session,
+            ServiceHashringNode responsible for the chat,
             or None if no nodes are available.
         """
         result = None
-        preference_list = self.hashring.preference_list(chat_session_token)
+        preference_list = self.hashring.preference_list(chat_token)
         if preference_list:
             result = preference_list[0]
         return result
@@ -163,7 +158,6 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             result.append(hashring_node)
         return result
 
-    
     def _persist_observer(self, event):
         """Perister observer method.
 
@@ -173,10 +167,10 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         #When a chat session is successfuly persisted, perform
         #one final replication so that other nodes become aware
         #that the session has been persisted.
-        if event.event_type == PersistEvent.SESSION_PERSISTED_EVENT:
+        if event.event_type == PersistEvent.CHAT_PERSISTED_EVENT:
             self.log.info("chat session (id=%s) successfully persisted" \
-                    % event.chat_session.id)
-            self.replicator.replicate(event.chat_session, [])
+                    % event.chat.id)
+            self.replicator.replicate(event.chat, [])
 
     def _gc_observer(self, event):
         """GarbageCollector observer method.
@@ -184,10 +178,10 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         Args:
             event: GarbageCollectionEvent object
         """
-        if event.event_type == GarbageCollectionEvent.ZOMBIE_SESSION_EVENT:
-            primary_node = self._primary_node(event.chat_session.token)
+        if event.event_type == GarbageCollectionEvent.ZOMBIE_CHAT_EVENT:
+            primary_node = self._primary_node(event.chat.token)
             if not self._is_remote_node(primary_node):
-                self.persister.persist(event.chat_session, [], zombie=True)
+                self.persister.persist(event.chat, [], zombie=True)
 
     def start(self):
         """Start handler."""
@@ -215,7 +209,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
 
         #Trigger messages which will cause all open
         #getMessage requests to return.
-        self.chat_sessions_manager.trigger_messages()
+        self.chat_manager.trigger_messages()
 
     def join(self, timeout=None):
         """Join service handler.
@@ -232,7 +226,6 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
                 self.garbage_collector,
                 self.hashring,
                 self.replicator,
-                self.persister,
                 super(ChatServiceHandler, self)
                 ]
         join(greenlets, timeout)
@@ -250,8 +243,8 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         """
         return self._convert_hashring_nodes(self.hashring.hashring())
 
-    def getPreferenceList(self, requestContext, chatSessionToken):
-        """Return a preference list of HashringNode's for chatSessionToken.
+    def getPreferenceList(self, requestContext, chatToken):
+        """Return a preference list of HashringNode's for chatToken.
         
         Generates an ordered list of HashringNode's responsible for
         the data. The list is ordered by node preference, where the
@@ -268,22 +261,22 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
 
         Args:
             requestContext: RequestContext object.
-            chatSessionToken: chat session token
+            chatToken: chat token
         Returns:
             Ordered list of HashringNode's.
         """
         merge_nodes = not settings.REPLICATION_ALLOW_SAME_HOST
         preference_list = self.hashring.preference_list(
-                chatSessionToken,
+                chatToken,
                 merge_nodes=merge_nodes)
         return self._convert_hashring_nodes(preference_list)
 
-    def getMessages(self, requestContext, chatSessionToken, asOf, block, timeout):
+    def getMessages(self, requestContext, chatToken, asOf, block, timeout):
         """Long poll for new chat messages.
 
         Args:
             requestContext: RequestContext object.
-            chatSessionToken: chat session token
+            chatToken: chat token
             asOf: unix timestamp after which messages should
                 be returned.
             block: boolean indicating if this method should block.
@@ -294,18 +287,34 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
         Raises:
             UnavailableException if no nodes are available.
         """
-        primary_node = self._primary_node(chatSessionToken)
+        primary_node = self._primary_node(chatToken)
         if primary_node is None:
             raise UnavailableException("no nodes available")
 
         if self._is_remote_node(primary_node):
             proxy = self._service_proxy(primary_node)
-            return proxy.getMessages(requestContext, chatSessionToken, asOf, block, timeout)
+            return proxy.getMessages(requestContext, chatToken, asOf, block, timeout)
         
         try:
-            chat_session = self.chat_sessions_manager.get(chatSessionToken)
-            messages = chat_session.get_messages(asOf, block, timeout, requestContext.userId)
+            chat = self.chat_manager.get(chatToken)
+            if chat.expired:
+                raise InvalidChatException()
+
+            #Reading messages may generate messages.
+            #We use reads to ensure proper user/chat state.
+            #For instance, if user has not polled for messages
+            #within a threshold we change their status to UNAVAILABLE.
+            additional_messages = self.message_handler_manager.handle_poll(
+                    requestContext, chat)
+            for message in additional_messages:
+                self.sendMessage(requestContext, message,
+                        settings.REPLICATION_N, settings.REPLICATION_W)
+            
+            #read messages
+            messages = chat.get_messages(asOf, block, timeout, requestContext.userId)
             return messages
+        except (KeyError, InvalidChatException):
+            raise InvalidChatException("invalid chat token: %s" % chatToken)
         except Exception as error:
             self.log.exception(error)
             raise UnavailableException(str(error))
@@ -327,7 +336,7 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             UnavailableException if no nodes are available or W
                 cannot be satisified.
         """
-        primary_node = self._primary_node(message.header.chatSessionToken)
+        primary_node = self._primary_node(message.header.chatToken)
         if primary_node is None:
             raise UnavailableException("no nodes available")
 
@@ -336,10 +345,13 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             return proxy.sendMessage(requestContext, message, N, W)
 
         try:
-            chat_session = self.chat_sessions_manager.get(message.header.chatSessionToken)
+            chat = self.chat_manager.get(message.header.chatToken)
+            if chat.expired:
+                raise InvalidChatException()
+            
             additional_messages = self.message_handler_manager.handle(
                     requestContext,
-                    chat_session,
+                    chat,
                     message)
 
             #create message list, including additional messages
@@ -348,18 +360,24 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             messages.extend(additional_messages)
 
             #send messages to waiting users.
-            chat_session.send_messages(messages)
+            chat.send_messages(messages)
             
             #replicate messages
-            async_result = self.replicator.replicate(chat_session, messages, N, W)
+            async_result = self.replicator.replicate(chat, messages, N, W)
             async_result.get(block=True, timeout=settings.REPLICATION_TIMEOUT)
 
             #persist messages
-            self.persister.persist(chat_session, messages)
+            #Note that currently persister does not store messages
+            #but will take persist actions when a ChatStatus message
+            #which ends the chat arrives.
+            self.persister.persist(chat, messages)
 
             #return updated message
             return message
-
+        
+        except (KeyError, InvalidChatException):
+            raise InvalidChatException("invalid chat token: %s" %
+                    message.header.chatToken)
         except MessageHandlerException as error:
             self.log.exception(error)
             raise InvalidMessageException(str(error))
@@ -374,37 +392,55 @@ class ChatServiceHandler(TChatService.Iface, GServiceHandler):
             self.log.exception(error)
             raise UnavailableException(str(error))
 
-    def replicate(self, requestContext, replicationSnapshot):
+    def twilioRequest(self, requestContext, path, params):
+        """Twilio callback request
+
+        Args:
+            requestContext: RequestContext object.
+            path: http request path
+            params: Dict of http request params
+        Returns:
+            Twiml string
+        Raises:
+            UnavailableException if no nodes are available.
+        """
+        chat_token = params.get("chat_token")
+        primary_node = self._primary_node(chat_token)
+        if primary_node is None:
+            raise UnavailableException("no nodes available")
+
+        if self._is_remote_node(primary_node):
+            proxy = self._service_proxy(primary_node)
+            return proxy.twilioRequest(requestContext, path, params)
+        
+        try:
+            chat = self.chat_manager.get(chat_token)
+            twiml = self.twilio_handler_manager.handle(
+                    requestContext, chat, path, params)
+            return twiml
+        except (TwilioHandlerException, KeyError):
+            raise InvalidChatException("invalid chat token: %s" % chat_token)
+        except Exception as error:
+            self.log.exception(error)
+            raise UnavailableException(str(error))
+
+    def replicate(self, requestContext, chatSnapshot):
         """Store a replication snapshot from another node.
 
         Args:
             requestContext: RequestContext object
             replicationSnapshot: ReplicationSnapshot object
         """
-        chat_session_snapshot = replicationSnapshot.chatSessionSnapshot
-        chat_session = self.chat_sessions_manager.get(chat_session_snapshot.token)
-
-        #update connect timestamp
-        if chat_session_snapshot.connectTimestamp > 0:
-            chat_session.connect = tz.timestamp_to_utc(chat_session_snapshot.connectTimestamp)
-
-        #update publish timestamp
-        if chat_session_snapshot.publishTimestamp > 0:
-            chat_session.publish = tz.timestamp_to_utc(chat_session_snapshot.publishTimestamp)
-        
-        #update start timestamp
-        if chat_session_snapshot.startTimestamp > 0:
-            chat_session.start = tz.timestamp_to_utc(chat_session_snapshot.startTimestamp)
-        
-        #update end timestamp
-        if chat_session_snapshot.endTimestamp > 0:
-            chat_session.end = tz.timestamp_to_utc(chat_session_snapshot.endTimestamp)
-        
-        #update persisted flag
-        chat_session.persisted = chat_session_snapshot.persisted
-        
-        #store replicated messages.
-        chat_session.store_replicated_messages(chat_session_snapshot.messages)
+        chat = self.chat_manager.get(chatSnapshot.state.token)
+        chat.state.status = chatSnapshot.state.status
+        chat.state.maxDuration = chatSnapshot.state.maxDuration
+        chat.state.maxParticipants = chatSnapshot.state.maxParticipants
+        chat.state.startTimestamp = chatSnapshot.state.startTimestamp
+        chat.state.endTimestamp = chatSnapshot.state.endTimestamp
+        chat.state.users = chatSnapshot.state.users
+        chat.state.persisted = chatSnapshot.state.persisted
+        chat.state.session = chatSnapshot.state.session
+        chat.store_replicated_messages(chatSnapshot.state.messages)
 
     def expireZookeeperSession(self, requestContext, timeout):
         result = False
@@ -418,8 +454,7 @@ class ChatMongrel2Handler(GMongrel2Handler):
     """Chat mongrel2 handler."""
 
     URL_HANDLERS = [
-        (r'^/chat/messages$', 'handle_get_chat_messages'),
-        (r'^/chat/message$', 'handle_post_chat_message'),
+        (r'^/chatsvc/twilio_.*$', 'handle_twilio_request'),
     ]
 
     def __init__(self, service_handler):
@@ -434,112 +469,20 @@ class ChatMongrel2Handler(GMongrel2Handler):
         self.service_handler = service_handler
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
 
-        self.message_factory = MessageFactory()
+    def handle_twilio_request(self, request):
+        request_context = RequestContext()
+        params = request.params()
 
-        self.riak_client_factory = RiakClientFactory(
-                host=settings.RIAK_HOST,
-                port=settings.RIAK_PORT,
-                transport_class=riak_gevent.RiakPbcTransport)
-
-        self.session_store_pool = RiakSessionStorePool(
-                self.riak_client_factory,
-                settings.RIAK_SESSION_BUCKET,
-                settings.RIAK_SESSION_POOL_SIZE,
-                queue_class=gevent.queue.Queue)
+        self.log.info(request.req.path)
+        self.log.info(request.params())
         
-    def _handle_message(self, request, session):
-        """Message helper..
-
-        Args:
-            request: Mongrel SafeRequest object.
-            session: Session object.
-        Returns:
-            (request_context, chat_session_token) tuple.
-        """
-        session_data = session.get_data()
-
-        #Use the user_id in the "chat_session", since
-        #session.user_id() will not be set in the case
-        #of anonymous user.
-        #user_id = session.user_id()
-        user_id = session_data["chat_session"]["user_id"]
-        chat_session_token = session_data["chat_session"]["chat_session_token"]
-
-        request_context = RequestContext(userId = user_id, sessionId = session.get_key())
-
-        return (request_context, chat_session_token)
-
-    def handle_disconnect(self, request):
-        """Mongrel connection disconnect handler."""
-        pass
-
-    @session_required
-    def handle_get_chat_messages(self, request, session):
-        """Get chat messages handler.
-
-        Args:
-            request: Mongrel SafeRequest object
-            session: Session object
-        Returns:
-            JsonResponse object.
-        Raises:
-            HttpError
-        """
-        request_context, chat_session_token = self._handle_message(request, session)
-        asOf = float(request.param("asOf"))
-
-        try:
-            messages =  self.service_handler.getMessages(
-                    request_context,
-                    chat_session_token,
-                    asOf,
-                    block=True,
-                    timeout=settings.CHAT_LONG_POLL_WAIT)
-            response = self.JsonResponse(data=json.dumps(messages, cls=MessageEncoder))
-            return response
-        except UnavailableException as error:
-            self.log.error("get failed: %s" % error.fault)
-            raise HttpError(503, "service unavailable")
-        except Exception as error:
-            self.log.exception(error)
-            raise HttpError(500, "internal error")
-
-
-    @session_required
-    def handle_post_chat_message(self, request, session):
-        """Send chat messages handler.
-
-        Args:
-            request: Mongrel SafeRequest object
-            session: Session object
-        Returns:
-            JsonResponse object.
-        Raises:
-            HttpError
-        """
-        request_context, chat_session_token = self._handle_message(request, session)
-
-        header = request.data().get("header")
-        header["userId"] = request_context.userId
-        header["chatSessionToken"] = chat_session_token
-        msg = request.data().get("msg")
-
-        message = self.message_factory.create(header, msg)
-
-        try:
-            response = self.service_handler.sendMessage(
-                    request_context,
-                    message,
-                    settings.REPLICATION_N,
-                    settings.REPLICATION_W)
-            result = self.JsonResponse(data=json.dumps(response, cls=MessageEncoder))
-            return result
-        except InvalidMessageException as error:
-            self.log.error("post failed: %s" % error.fault)
-            raise HttpError(400, "invalid message")
-        except UnavailableException as error:
-            self.log.error("post failed: %s" % error.fault)
-            raise HttpError(503, "service unavailable")
-        except Exception as error:
-            self.log.exception(error)
-            raise HttpError(500, "internal error")
+        if params.get("chat_token") is None:
+            return self.Response()
+        
+        twiml = self.service_handler.twilioRequest(
+                request_context,
+                request.req.path,
+                request.params())
+        return self.Response(twiml, headers = {
+            "Content-type": "text/xml"
+        })
