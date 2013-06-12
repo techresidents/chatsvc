@@ -6,14 +6,12 @@ from twilio_handlers.manager import TwilioHandlerManager
 
 START_TEMPLATE = Template("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>Please record your message at the beep.</Say>
     <Record action="twilio_voice_end?chat_token=$chat_token&amp;user_id=$user_id" method="GET" maxLength="$max_duration" />
 </Response>
 """)
 
 MULTI_START_TEMPLATE = Template("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>Welcome to the conference.</Say>
     <Dial action="twilio_voice_end?chat_token=$chat_token" record="true">
         <Conference maxParticipants="$max_participants">$chat_token</Conference>
     </Dial>
