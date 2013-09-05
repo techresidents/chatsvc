@@ -6,7 +6,7 @@ from twilio_handlers.manager import TwilioHandlerManager
 
 START_TEMPLATE = Template("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Record action="twilio_voice_end?chat_token=$chat_token&amp;user_id=$user_id" method="GET" maxLength="$max_duration" />
+    <Record action="twilio_voice_end?chat_token=$chat_token&amp;user_id=$user_id" method="GET" maxLength="$max_duration" timeout="$timeout" />
 </Response>
 """)
 
@@ -84,7 +84,8 @@ class VoiceHandler(TwilioHandler):
             "chat_token": chat.state.token,
             "max_duration": chat.state.maxDuration + chat.expiration_threshold,
             "max_participants": chat.state.maxParticipants,
-            "user_id": user_id
+            "user_id": user_id,
+            "timeout": 30
         }
 
         twilio_data = chat.state.session.get("twilio_data")
