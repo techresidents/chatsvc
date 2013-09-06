@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.techresidents.services.chatsvc</groupId>
         <artifactId>chatsvc-idl</artifactId>
-        <version>0.30.0</version>
+        <version>0.31-SNAPSHOT</version>
     </parent>
 
     <artifactId>chatsvc-idl-java</artifactId>
